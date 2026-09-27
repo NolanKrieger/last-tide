@@ -1,0 +1,167 @@
+{
+  "wind_low": {
+    "file": "wind_low.wav",
+    "rate": 22050,
+    "seconds": 11.5
+  },
+  "wind_high": {
+    "file": "wind_high.wav",
+    "rate": 22050,
+    "seconds": 11.5
+  },
+  "waves": {
+    "file": "waves.wav",
+    "rate": 22050,
+    "seconds": 13.5
+  },
+  "creak": {
+    "file": "creak.wav",
+    "rate": 22050,
+    "seconds": 8.75
+  },
+  "rain": {
+    "file": "rain.wav",
+    "rate": 22050,
+    "seconds": 9.75
+  },
+  "harbour": {
+    "file": "harbour.wav",
+    "rate": 22050,
+    "seconds": 15.5
+  },
+  "gulls": {
+    "file": "gulls.wav",
+    "rate": 22050,
+    "seconds": 17.75
+  },
+  "pumps": {
+    "file": "pumps.wav",
+    "rate": 22050,
+    "seconds": 2.275
+  },
+  "dig": {
+    "file": "dig.wav",
+    "rate": 22050,
+    "seconds": 1.475
+  },
+  "water_rush": {
+    "file": "water_rush.wav",
+    "rate": 22050,
+    "seconds": 5.75
+  },
+  "siren_song": {
+    "file": "siren_song.wav",
+    "rate": 22050,
+    "seconds": 11.0
+  },
+  "cannon": {
+    "file": "cannon.wav",
+    "rate": 44100,
+    "seconds": 1.6
+  },
+  "hit": {
+    "file": "hit.wav",
+    "rate": 44100,
+    "seconds": 0.7
+  },
+  "splash": {
+    "file": "splash.wav",
+    "rate": 44100,
+    "seconds": 0.9
+  },
+  "ram": {
+    "file": "ram.wav",
+    "rate": 44100,
+    "seconds": 1.4
+  },
+  "bell": {
+    "file": "bell.wav",
+    "rate": 44100,
+    "seconds": 2.2
+  },
+  "bell_low": {
+    "file": "bell_low.wav",
+    "rate": 44100,
+    "seconds": 3.0
+  },
+  "coins": {
+    "file": "coins.wav",
+    "rate": 44100,
+    "seconds": 1.2
+  },
+  "sail_up": {
+    "file": "sail_up.wav",
+    "rate": 44100,
+    "seconds": 0.9
+  },
+  "sail_down": {
+    "file": "sail_down.wav",
+    "rate": 44100,
+    "seconds": 0.9
+  },
+  "thunder": {
+    "file": "thunder.wav",
+    "rate": 44100,
+    "seconds": 4.0
+  },
+  "drums": {
+    "file": "drums.wav",
+    "rate": 44100,
+    "seconds": 2.4
+  },
+  "sink": {
+    "file": "sink.wav",
+    "rate": 44100,
+    "seconds": 3.5
+  },
+  "monster_serpent": {
+    "file": "monster_serpent.wav",
+    "rate": 44100,
+    "seconds": 1.4
+  },
+  "monster_kraken": {
+    "file": "monster_kraken.wav",
+    "rate": 44100,
+    "seconds": 3.0
+  },
+  "monster_ghost": {
+    "file": "monster_ghost.wav",
+    "rate": 44100,
+    "seconds": 3.5
+  },
+  "monster_crocodile": {
+    "file": "monster_crocodile.wav",
+    "rate": 44100,
+    "seconds": 1.2
+  },
+  "monster_weed": {
+    "file": "monster_weed.wav",
+    "rate": 44100,
+    "seconds": 2.0
+  },
+  "monster_eruption": {
+    "file": "monster_eruption.wav",
+    "rate": 44100,
+    "seconds": 3.0
+  },
+  "quill": {
+    "file": "quill.wav",
+    "rate": 44100,
+    "seconds": 0.18
+  },
+  "click": {
+    "file": "click.wav",
+    "rate": 44100,
+    "seconds": 0.08
+  },
+  "gust": {
+    "file": "gust.wav",
+    "rate": 44100,
+    "seconds": 2.5
+  },
+  "monster_siren": {
+    "file": "monster_siren.wav",
+    "rate": 44100,
+    "seconds": 2.4
+  }
+}

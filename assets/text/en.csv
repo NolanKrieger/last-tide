@@ -1,0 +1,650 @@
+key,en
+GAME_TITLE,Last Tide
+HUD_WIND,"Wind {0:0} kn from {1}"
+HUD_HEADING,"Heading {0:000} · {1}"
+HUD_SPEED,"{0:0.0} kn"
+HUD_DAY,"Day {0} · {1} watch"
+HUD_PAUSED,"Paused · Esc resumes · Q quits"
+HUD_AGROUND,"Aground!"
+SAIL_0,Furled
+SAIL_1,One-third sail
+SAIL_2,Two-thirds sail
+SAIL_3,Full sail
+POS_INIRONS,In irons!
+POS_CLOSEHAULED,Close-hauled
+POS_CLOSEREACH,Close reach
+POS_BEAMREACH,Beam reach
+POS_BROADREACH,Broad reach
+POS_RUNNING,Running
+WATCH_0,middle
+WATCH_1,morning
+WATCH_2,forenoon
+WATCH_3,afternoon
+WATCH_4,dog
+WATCH_5,first
+PT_0,N
+PT_1,NNE
+PT_2,NE
+PT_3,ENE
+PT_4,E
+PT_5,ESE
+PT_6,SE
+PT_7,SSE
+PT_8,S
+PT_9,SSW
+PT_10,SW
+PT_11,WSW
+PT_12,W
+PT_13,WNW
+PT_14,NW
+PT_15,NNW
+HULL_sloop,Sloop
+HULL_cutter,Cutter
+HULL_schooner,Schooner
+HULL_xebec,Xebec
+HULL_brigantine,Brigantine
+HULL_fluyt,Fluyt
+HULL_brig,Brig
+HULL_barque,Barque
+HULL_corvette,Corvette
+HULL_frigate,Frigate
+HULL_indiaman,Indiaman
+HULL_heavy_frigate,Heavy frigate
+HULL_galleon,Galleon
+HULL_man_o_war,Man-o'-war
+REGION_trade_isles,Trade Isles
+REGION_shoals,The Shoals
+REGION_deep,The Deep
+REGION_fog_banks,Fog Banks
+REGION_storm_reach,Storm Reach
+REGION_mangrove,Mangrove Maze
+REGION_volcanic,Volcanic Isles
+REGION_sargasso,Sargasso Weed Sea
+REGION_siren_ruins,Siren's Ruins
+FACTION_crown,The Crown
+FACTION_freetraders,Free Traders
+FACTION_brethren,The Brethren
+CHART_TITLE,The Chart
+CHART_HINT,"[[Chart]] or Esc closes · click drops an ink pin, Enter keeps it · right-click a pin removes it · wheel or + / − zooms · right-drag or the arrows pan"
+CHART_NO_PRICES,No prices seen yet
+CHART_PIN_PROMPT,Note for this pin
+CHART_PORT,"{0} · {1}"
+CHART_COVE,Secret cove
+CHART_SUBTITLE,"inked aboard the {0} · {1} · {2}% of the sea charted"
+CHART_COVE_LINE,"Secret cove · always open to you"
+CHART_PRICE,"{0} {1}"
+CHART_SELLS,"Sells: {0}"
+CHART_BUYS,"Buys: {0}"
+CHART_SEEN,"prices as seen on Day {0}"
+CHART_HEARD,"prices from a rumour, Day {0}"
+CHART_KEY,Key to the chart
+CHART_KEY_CROWN,Crown colony
+CHART_KEY_FORT,with a fort
+CHART_KEY_FREE,Free port
+CHART_KEY_HAVEN,Brethren haven
+CHART_KEY_COVE,Secret cove
+CHART_KEY_TREASURE,Treasure
+CHART_KEY_RUMOUR,Cove rumour
+CHART_KEY_WRECK,Wreck
+CHART_KEY_PIN,Your pin
+CHART_KEY_SHIP,Your ship
+CHART_SCALE,A scale of sea miles
+HUD_MANGROVE,The mangroves are too narrow for this hull
+PORT_TAB_MARKET,Market
+PORT_TAB_SHIPWRIGHT,Shipwright
+PORT_TAB_TAVERN,Tavern
+PORT_TAB_CASTOFF,Cast off
+PORT_GOLD,"{0} gold"
+PORT_STANDING,"{0} · {1} ({2:+0;-0;0})"
+PORT_STANDING_COVE,"Secret cove · no questions asked"
+PORT_STANDING_WARNING,"— close to being shut out"
+STANDING_FRIENDLY,friendly
+STANDING_NEUTRAL,neutral
+STANDING_HOSTILE,hostile
+PORT_HOLD,"Hold {0}/{1} slots · provisions {2} · munitions {3} · timber {4}"
+PORT_CREW,"Crew {0}/{1} · wages {2} gold a day · {3} provisions a day"
+PORT_MARKET_HINT,"Prices move as you trade: the slider shows the marginal unit and the total. Buy low here, sell high where the good is wanted."
+PORT_PRICES,"Buy {0} · sell {1} · {2} {3}"
+PORT_BULKY,"· bulky, 2 slots each"
+PORT_COMPACT,"· compact, {0} to a slot"
+PORT_HELD,"You hold {0} · you could buy {1}"
+PORT_QTY,"Quantity {0} · buy for {1} · sell for {2}"
+PORT_BUY,"Buy {0}"
+PORT_SELL,"Sell {0}"
+PORT_REPAIR,"Hull {0}/{1} · {2} gold per point · full repair {3} gold"
+PORT_REPAIR_ALL,Repair all
+PORT_BUY_CANNON,"Buy a cannon · {0} gold"
+PORT_SELL_CANNON,"Sell a cannon · {0} gold"
+PORT_TAVERN_CREW,"Hands aboard {0} of {1}"
+PORT_HIRE,"Hire {0} · {1} gold"
+PORT_RUMOR,"Buy a rumour · {0} gold"
+PORT_RUMOR_LINE,"{0}: {1} at {2} gold · seen Day {3} · {4}"
+PORT_RUMOR_NONE,"The tavern talks for a price."
+PORT_RESULT_NOGOLD,Not enough gold.
+PORT_RESULT_NOROOM,No room in the hold.
+PORT_RESULT_NOTSOLD,"This yard builds only hulls the maze's channels will take."
+PORT_RESULT_NOSTOCK,The market has none to sell.
+PORT_RESULT_NOCARGO,You have none to sell.
+PORT_RESULT_CREWFULL,No room aboard.
+PORT_RESULT_NOTHING,Nothing to do.
+PORT_RESULT_NOTDOCKED,You are not in port.
+PORT_RESULT_NOTINHARBOR,Not inside a harbour.
+PORT_RESULT_PORTCLOSED,This port is closed to you.
+STOCK_scarce,scarce
+STOCK_short,short
+STOCK_steady,steady
+STOCK_plenty,plenty
+STOCK_glut,glut
+HUD_GOLD,"{0} gold"
+HUD_HOLD,"Hold {0}/{1}"
+HUD_STORES,"Provisions {0} · Munitions {1} · Timber {2}"
+HUD_CREW,"Crew {0}"
+HUD_DOCK,"Dock at {0}"
+HUD_DOCK_CLOSED,"{0} is closed to you"
+NOTICE_UNPAID,"The crew went unpaid tonight. They will desert at the next port."
+NOTICE_STARVED,"No provisions: a hand died in the night."
+NOTICE_DESERTED,"Unpaid hands deserted."
+NOTICE_COVE,"A secret cove! It is always open to you."
+GOOD_provisions,Provisions
+GOOD_munitions,Munitions
+GOOD_timber,Timber
+GOOD_hemp_rope,Hemp rope
+GOOD_sailcloth,Sailcloth
+GOOD_pitch_tar,Pitch & tar
+GOOD_iron,Iron
+GOOD_sugar,Sugar
+GOOD_molasses,Molasses
+GOOD_tobacco,Tobacco
+GOOD_cotton,Cotton
+GOOD_coffee,Coffee
+GOOD_cocoa,Cocoa
+GOOD_indigo,Indigo
+GOOD_mahogany,Mahogany
+GOOD_rum,Rum
+GOOD_cloth,Cloth
+GOOD_tools,Tools
+GOOD_muskets,Muskets
+GOOD_wine,Wine
+GOOD_spices,Spices
+GOOD_silk,Silk
+GOOD_porcelain,Porcelain
+GOOD_pearls,Pearls
+GOOD_ambergris,Ambergris
+GOOD_emeralds,Emeralds
+GOOD_relics,Relics
+PORT_COL_GOOD,good
+PORT_COL_BUY,buy
+PORT_COL_SELL,sell
+PORT_COL_TREND,trend
+PORT_COL_STOCK,stock
+PORT_COL_HELD,held
+HUD_GAUGE_HULL,hull
+HUD_GAUGE_WATER,water
+HUD_GUN_Q,[[FirePort]]
+HUD_GUN_E,[[FireStarboard]]
+HUD_MUNITIONS,"{0} shot · {1} guns"
+HUD_ORDER,"{0} · guns {1} · sails {2} · repair {3} · pumps {4}"
+ORDER_BATTLE,[[Order1]] Battle stations
+ORDER_MAKESAIL,[[Order2]] Make sail
+ORDER_REPAIR,[[Order3]] Repair & pump
+ORDER_BALANCED,[[Order4]] Balanced
+HUD_LAST_STAND,"LAST STAND · {0}"
+HUD_LAST_STAND_HULL,"She is foundering. Reach any open harbour before the glass runs out."
+HUD_LAST_STAND_WATER,"Water at the gunwales. Pump her below 80% or reach a harbour."
+HUD_SUNK,"SUNK · Day {0}"
+NOTICE_BY_A_HAIR,"By a hair! The harbour took her in with one point of hull left."
+TIER_flat_calm,Flat Calm
+TIER_light_airs,Light Airs
+TIER_freshening,Freshening
+TIER_choppy,Choppy
+TIER_squall,Squall
+TIER_gale,Gale
+TIER_storm,Storm
+TIER_maelstrom,Maelstrom
+TIER_last_tide,LAST TIDE
+NOTICE_SAIL_SIGHTED,"Sail ho! A hostile sail on the horizon."
+NOTICE_HUNTERS,"Hunters! Privateers with your name on a bounty."
+WX_STORM,Storm
+WX_FOG,Fog
+WX_DOLDRUMS,Doldrums
+WX_ASH,Ash fall
+WX_NIGHT_LIT,Night · lantern lit
+WX_NIGHT_DOUSED,Night · lantern doused
+WX_TORN,Torn sails
+NOTICE_TORN_SAILS,"The mainsail split! Reef down. −30% speed until a shipwright mends it."
+MONSTER_reef_serpent,Reef Serpent
+MONSTER_kraken,Kraken
+MONSTER_ghost_ship,Ghost Ship
+MONSTER_crocodile,Giant Crocodile
+MONSTER_weed_kraken,Weed-Kraken
+MONSTER_siren,Siren
+WX_PINNED,Held fast
+WX_JAMMED,Rudder jammed
+WX_SONG,Her song pulls the helm
+WX_ERUPTION_WARN,"Rocks in {0}"
+NOTICE_MONSTER_reef_serpent,"Something long and scaled is circling in the shallows."
+NOTICE_MONSTER_kraken,"The water heaves. Tentacles."
+NOTICE_MONSTER_ghost_ship,"A lantern in the fog where no ship should be."
+NOTICE_MONSTER_crocodile,"Eyes in the mangrove roots."
+NOTICE_MONSTER_weed_kraken,"The weed is moving on its own."
+NOTICE_MONSTER_siren,"A song from the rocks. Hold your course."
+NOTICE_KRAKEN_GRIP,"The Kraken has her! Shoot the tentacles; carpenters and pumps to it."
+NOTICE_WEED_GRIP,"Weed round the hull, dragging her down! Cut it or shoot it."
+NOTICE_RUDDER_JAMMED,"The crocodile's bite has jammed the rudder!"
+NOTICE_ERUPTION,"The mountain rumbles. Watch the marked water."
+NOTICE_MONSTER_BEATEN,"The beast is beaten."
+NOTICE_MONSTER_ESCAPED,"Lost it. Breathe."
+ACHIEVEMENT_serpent_slayer,"Achievement: Serpent Slayer"
+ACHIEVEMENT_unkrakened,"Achievement: Unkrakened"
+ACHIEVEMENT_lay_the_ghost,"Achievement: Lay the Ghost"
+ACHIEVEMENT_handbags,"Achievement: Handbags"
+ACHIEVEMENT_weeded_out,"Achievement: Weeded Out"
+ACHIEVEMENT_deaf_ears,"Achievement: Deaf Ears"
+SUNK_REEFSERPENT,"Taken by the Reef Serpent"
+SUNK_KRAKEN,"Dragged down by the Kraken"
+SUNK_GHOSTSHIP,"Sunk by the Ghost Ship"
+SUNK_CROCODILE,"Lost to the Giant Crocodile"
+SUNK_WEEDKRAKEN,"Swallowed by the Weed-Kraken"
+SUNK_SIREN,"Wrecked on the Siren's rocks"
+SUNK_ERUPTION,"Buried by the mountain's rocks"
+SUNK_GUNS,"Shot to pieces"
+SUNK_WATER,"Foundered"
+SUNK_SEA,"Lost at sea"
+SUNK_RAM,"Rammed and sunk"
+PORT_PARTS,Parts
+PORT_HULLS,Hulls
+PORT_PART_BUY,"Grade {0} · {1} gold"
+PORT_PART_MAX,Best there is
+PORT_TORN,"Torn sails mended for {0} gold"
+PORT_CANNONS,"Cannons aboard {0} of {1} slots · {2}-pounders"
+PORT_HULL_LINE,"{0}: hull {1} · hold {2} · crew {3} · guns {4} · speed ×{5} · points {6}° · officers {7} · {8}"
+PORT_HULL_YOURS,"Yours · trade-in {0}"
+PORT_HULL_BUY,"Buy · {0} gold after trade-in"
+PORT_HULL_NOROOM,"Cargo would not fit"
+PORT_HULL_NOTSOLD,"Too big for the maze"
+RIG_foreandaft,fore-and-aft
+RIG_lateen,lateen
+RIG_mixed,mixed rig
+RIG_square,square rig
+PART_sails,Sails
+PART_sails_EFFECT,"+3% speed and quicker sail handling a grade"
+PART_rigging,Rigging
+PART_rigging_EFFECT,"points 3° closer to the wind a grade"
+PART_planking,Hull planking
+PART_planking_EFFECT,"+12% hull a grade, −1.5% speed"
+PART_copper,Copper sheathing
+PART_copper_EFFECT,"+2% speed; each hit 12% likelier to open no leak, a grade"
+PART_cannons,Cannons
+PART_cannons_EFFECT,"heavier shot: +28 m range, +2 damage, +2 s reload a grade"
+PART_ram,Ram prow
+PART_ram_EFFECT,"+25% ram damage, −12% self-damage a grade"
+PART_pumps,Pumps
+PART_pumps_EFFECT,"+30% pumping a grade"
+PART_hold,Hold
+PART_hold_EFFECT,"+10% cargo a grade"
+PART_lantern,Lantern & spyglass
+PART_lantern_EFFECT,"+10% night radius and spyglass reach a grade"
+PORT_OFFICERS,"Officers aboard {0} of {1} berths"
+PORT_OFFICER_LINE,"{0} ({1}) · {2} gold, {3} a day · {4} · {5}"
+PORT_OFFICER_NONE,none aboard
+PORT_OFFICER_HAVE,"aboard: {0}"
+PORT_OFFICER_HIRE,"Hire · {0}"
+PORT_DISMISS,Dismiss
+OFFICER_lookout,Lookout
+OFFICER_marines,Marines
+OFFICER_quartermaster,Quartermaster
+OFFICER_lookout_EFFECT_0,"sees 15% farther, warns 100 m beyond"
+OFFICER_lookout_EFFECT_1,"sees 30% farther, warns 200 m beyond"
+OFFICER_lookout_EFFECT_2,"sees 50% farther, warns 300 m beyond"
+OFFICER_marines_EFFECT_0,"a volley every 6 s within 120 m kills 1 hand"
+OFFICER_marines_EFFECT_1,"a volley every 6 s within 120 m kills 2 hands"
+OFFICER_marines_EFFECT_2,"a volley every 6 s within 120 m kills 3 hands"
+OFFICER_quartermaster_EFFECT_0,"prices 3% better, wages −10%, provisions last +15%"
+OFFICER_quartermaster_EFFECT_1,"prices 6% better, wages −20%, provisions last +30%"
+OFFICER_quartermaster_EFFECT_2,"prices 10% better, wages −30%, provisions last +50%"
+TIER_green,green
+TIER_seasoned,seasoned
+TIER_legendary,legendary
+NOTICE_OFFICERS_LEFT,"The officers walked off unpaid."
+NOTICE_OFFICERS_ASHORE,"No berth aboard the new hull: the last officers hired went ashore."
+ACHIEVEMENT_galleon_captain,"Achievement: Galleon Captain"
+ACHIEVEMENT_ship_of_the_line,"Achievement: Ship of the Line"
+CREW_TITLE,"Crew {0} of {1} · {2}"
+CREW_NOTE,"Hands not at a station work the pumps. Guns need one hand each, sails the hull's riggers, repair one per 100 hull. Orders [[Order1]]–[[Order4]] reset the split."
+CREW_HEAD,"Crew · {0} of {1}"
+CREW_CLOSE,[[Crew]] or Esc closes
+CREW_WAGES,"wages {0} gold a day · {1} provisions a day"
+STATION_GUNS_NAME,Guns
+STATION_SAILS_NAME,Sails
+STATION_REPAIR_NAME,Repair
+STATION_PUMPS_NAME,Pumps
+STATION_COUNT,"{0} of {1} needed"
+STATION_REST,"{0} · everyone else"
+STATION_GUNS,"Guns {0} (need {1})"
+STATION_SAILS,"Sails {0} (need {1})"
+STATION_REPAIR,"Repair {0} (need {1})"
+STATION_PUMPS,"Pumps {0}"
+ORDER_CUSTOM,Custom
+HUD_HINTS,"[[SailUp]] / [[SailDown]] sail · [[Port]] / [[Starboard]] helm · [[FirePort]] / [[FireStarboard]] broadsides · RMB spyglass · [[Order1]]–[[Order4]] / [[Crew]] crew · [[Lantern]] lantern · [[Dock]] dock · [[Chart]] chart · Esc pause"
+PORT_BLACK_MARKET,Black market
+PORT_UNIQUE_BUY,"Buy · {0} gold"
+PORT_OWNED,aboard
+UNIQUE_ghost_sails,Ghost-grey sails
+UNIQUE_ghost_sails_EFFECT,"hunters must come 30% closer to spot you"
+UNIQUE_smugglers_keel,Smuggler's keel
+UNIQUE_smugglers_keel_EFFECT,"points 5% closer to the wind"
+UNIQUE_long_nines,Long nines
+UNIQUE_long_nines_EFFECT,"+40 m to every gun"
+UNIQUE_bilge_engine,Bilge engine
+UNIQUE_bilge_engine_EFFECT,"pumps work half again as hard"
+UNIQUE_hidden_hold,Hidden hold
+UNIQUE_hidden_hold_EFFECT,"+15% cargo"
+UNIQUE_false_colours,False colours
+UNIQUE_false_colours_EFFECT,"grudges fade twice as fast"
+PORT_MAP_LINE,"A torn chart of an island, said to lie in the {0}. Match its coast at sea and dig at the X. Maps carried: {1}."
+PORT_MAP_NONE,"No bottle maps for sale today."
+PORT_MAP_BUY,"Buy the map · {0} gold"
+PORT_TABS_HINT,"[[FirePort]] / [[FireStarboard]] turn the page · Esc casts off"
+PORT_COL_NOTE,notes
+PORT_COL_HERE,here
+PORT_ROLE_MAKES_SHORT,made
+PORT_ROLE_WANTS_SHORT,wanted
+PORT_REPAIRS,Repairs
+PORT_GUNS,Guns
+PORT_HULL_HP,"Hull {0} of {1}"
+PORT_REPAIR_COST,"{0} gold a point · full repair {1} gold"
+PORT_TRADE_IN,"Trade-in for yours: {0} gold"
+PORT_HULL_STATS,"hull {0} · hold {1} · crew {2} · guns {3}"
+PORT_HULL_NICHE,"speed ×{0} · points {1}° · {2} · {3} officer berths"
+PORT_HULL_YOURS_SHORT,Yours
+PORT_HULL_BUY_SHORT,"{0} gold"
+PORT_HULL_SWAP,"Trade down · the yard pays {0} gold"
+PORT_HIRE_NOTE,"{0} gold a head to sign on · wages are paid at midnight"
+PORT_RUMOURS,Rumours
+PORT_RUMOURS_HEARD,Rumours in your ledger
+PORT_RUMOUR_HEARD,"{0} · {1} about {2} · Day {3}"
+PORT_RUMOR_COVE,"The keeper leans in: a smugglers' cove hides somewhere near. The rough place is marked on your chart with a ‘?’."
+PORT_MAP_HEAD,A bottle map
+PORT_OFFICER_NAME,"{0} · {1}"
+PORT_OFFICER_TERMS,"{0} gold to sign · {1} a day"
+PORT_STANDING_LINE,"{0} ({1:+0;-0;0})"
+PORT_SHUT_WARNING,"Close to being shut out of their ports"
+PORT_HOLD_SHORT,"{0} / {1}"
+PORT_STORES,"Provisions {0} · munitions {1} · timber {2}"
+PORT_NOTE_MARGIN,"{0} each"
+PORT_NOTE_ELSEWHERE,"sells {0}"
+GROUP_CONSUMABLE,Ship's consumables
+GROUP_SHIPSTORES,Ship stores
+GROUP_PRODUCE,Colonial produce
+GROUP_MANUFACTURED,Manufactures
+GROUP_LUXURY,Luxuries
+GROUP_RARE,Rarities
+PORT_EACH,"{0} each"
+PORT_HELD_PAID,"{0} · paid {1} each"
+PORT_HELD_ONLY,"{0}"
+PORT_HINT_SEEN,"Your ledger: {0} pays about {1} · seen Day {2}"
+PORT_HINT_RUMOUR,"A rumour: {0} pays about {1} · heard Day {2}"
+PORT_HINT_NONE,"No other price in your ledger yet. Taverns sell rumours of distant markets."
+PORT_BUY_FOR,"Buy {0} · {1} gold"
+PORT_BUY_CANT,"Buy {0} · cannot"
+PORT_SELL_FOR,"Sell {0} · {1} gold"
+PORT_SELL_NONE,"None in the hold"
+PORT_ELSEWHERE,Prices on record elsewhere
+PORT_KNOWN_SEEN,"{0} · about {1} · seen Day {2}"
+PORT_KNOWN_RUMOUR,"{0} · about {1} · rumour, Day {2}"
+PORT_ROLE_MAKES,"Made here, so it is cheap here."
+PORT_ROLE_WANTS,"Wanted here, so it fetches a good price."
+PORT_ROLE_NEITHER,"Neither made nor much wanted here."
+PORT_COVE_LINE,no questions asked
+HUD_DIG,"Dig for the treasure"
+HUD_DIG_FURL,"Furl the sails to dig"
+HUD_DIG_NO_MAP,"A dig site, but no matched map for it"
+HUD_SALVAGE,"Salvage the wreck"
+HUD_SALVAGE_FURL,"Furl the sails to salvage"
+HUD_DIGGING,"Digging · {0} s"
+HUD_SALVAGING,"Salvaging · {0} s"
+MARK_DIG,dig here
+CHART_MAPS,Bottle maps
+CHART_MAP_UNSOLVED,"unmatched · find this coast"
+CHART_MAP_MATCHED,"matched · X pinned"
+NOTICE_BOTTLE_MAP,"A bottle map: a torn chart with an X. Find the coast it shows."
+NOTICE_MAP_MATCHED,"That coast matches the sketch! The X is pinned on your chart."
+NOTICE_DIG_INTERRUPTED,"The dig is abandoned."
+NOTICE_FURL_FIRST,"Drop anchor: furl the sails first."
+NOTICE_TREASURE,"Treasure! Gold and something rare."
+NOTICE_SALVAGE,"Salvage from the wreck hauled aboard."
+NOTICE_COSMETIC_flag_crimson,"Unlocked: crimson flag"
+NOTICE_COSMETIC_flag_black,"Unlocked: black flag"
+NOTICE_COSMETIC_flag_gold,"Unlocked: gold flag"
+NOTICE_COSMETIC_sails_ochre,"Unlocked: ochre sails"
+NOTICE_COSMETIC_sails_indigo,"Unlocked: indigo sails"
+NOTICE_COSMETIC_sails_striped,"Unlocked: striped sails"
+NOTICE_COSMETIC_figurehead_serpent,"Unlocked: serpent figurehead"
+NOTICE_COSMETIC_figurehead_siren,"Unlocked: siren figurehead"
+NOTICE_COSMETIC_figurehead_kraken,"Unlocked: kraken figurehead"
+NOTICE_COSMETIC_hull_black,"Unlocked: black hull"
+NOTICE_COSMETIC_hull_green,"Unlocked: green hull"
+NOTICE_COSMETIC_hull_red,"Unlocked: red hull"
+NOTICE_COSMETIC_wake_gold,"Unlocked: gold wake"
+NOTICE_COSMETIC_wake_crimson,"Unlocked: crimson wake"
+NOTICE_COSMETIC_wake_indigo,"Unlocked: indigo wake"
+ACHIEVEMENT_nine_seas,"Achievement: Nine Seas"
+ACHIEVEMENT_cartographer,"Achievement: Cartographer"
+ACHIEVEMENT_smugglers_welcome,"Achievement: Smuggler's Welcome"
+ACHIEVEMENT_x_marks,"Achievement: X Marks"
+ACHIEVEMENT_by_a_hair,"Achievement: By a Hair"
+ACHIEVEMENT_last_tide,"Achievement: Last Tide"
+ACHIEVEMENT_fair_winds,"Achievement: Fair Winds"
+ACHIEVEMENT_heavy_weather,"Achievement: Heavy Weather"
+ACHIEVEMENT_eye_of_the_storm,"Achievement: Eye of the Storm"
+TITLE_TAGLINE,"Sail, trade and survive the rising tide"
+TITLE_NEW,New voyage
+TITLE_RESUME,Resume voyage
+TITLE_LOGBOOK,The logbook
+TITLE_QUIT,Quit
+TITLE_BACK,Back
+TITLE_SET_SAIL,Set sail
+TITLE_DIFFICULTY,Difficulty
+TITLE_COLOURS,Colours
+TITLE_UNLOCKED,"{0} of {1} colours unlocked · treasure and achievements unlock the rest"
+TITLE_SHIP_NAME,Ship's name
+TITLE_ANOTHER,Another
+TITLE_NO_VOYAGES,"No voyages logged yet"
+TITLE_BESTS_LINE,"{0} voyages logged · best {1} days on {2}"
+TITLE_VERSION,"Last Tide · pre-release build"
+PRESET_CALMSEAS,Calm Seas
+PRESET_ROUGHSEAS,Rough Seas
+PRESET_TEMPEST,Tempest
+PRESET_LINE_CALMSEAS,"Threat grows 0.10 a day\na good run reaches Day 25"
+PRESET_LINE_ROUGHSEAS,"Threat grows 0.15 a day\na good run reaches Day 15–20"
+PRESET_LINE_TEMPEST,"Threat grows 0.22 a day\na good run reaches Day 10–12"
+PRESET_BEST,"Best · {0} days"
+PRESET_NO_BEST,"No voyage logged"
+SLOT_flag,Flag
+SLOT_sails,Sails
+SLOT_figurehead,Figurehead
+SLOT_hull,Hull
+SLOT_wake,Wake
+COSMETIC_PLAIN,Plain
+COSMETIC_flag_crimson,Crimson flag
+COSMETIC_flag_black,Black flag
+COSMETIC_flag_gold,Gold flag
+COSMETIC_sails_ochre,Ochre sails
+COSMETIC_sails_indigo,Indigo sails
+COSMETIC_sails_striped,Striped sails
+COSMETIC_figurehead_serpent,Serpent figurehead
+COSMETIC_figurehead_siren,Siren figurehead
+COSMETIC_figurehead_kraken,Kraken figurehead
+COSMETIC_hull_black,Black hull
+COSMETIC_hull_green,Green hull
+COSMETIC_hull_red,Red hull
+COSMETIC_wake_gold,Gold wake
+COSMETIC_wake_crimson,Crimson wake
+COSMETIC_wake_indigo,Indigo wake
+LOG_BESTS,Personal bests
+LOG_BEST_ROW,"{0}: Day {1} · {2} · {3} · {4}"
+LOG_BEST_NONE,"{0}: no voyage logged"
+LOG_ACHIEVEMENTS,"Achievements · {0} of {1}"
+ACH_fair_winds_NAME,Fair Winds
+ACH_fair_winds_DESC,Reach Day 10 on Calm Seas
+ACH_heavy_weather_NAME,Heavy Weather
+ACH_heavy_weather_DESC,Reach Day 15 on Rough Seas
+ACH_eye_of_the_storm_NAME,Eye of the Storm
+ACH_eye_of_the_storm_DESC,Reach Day 12 on Tempest
+ACH_serpent_slayer_NAME,Serpent Slayer
+ACH_serpent_slayer_DESC,Kill a Reef Serpent
+ACH_unkrakened_NAME,Unkrakened
+ACH_unkrakened_DESC,Break free from the Kraken
+ACH_lay_the_ghost_NAME,Lay the Ghost
+ACH_lay_the_ghost_DESC,Sink the Ghost Ship
+ACH_handbags_NAME,Handbags
+ACH_handbags_DESC,Kill the Giant Crocodile
+ACH_weeded_out_NAME,Weeded Out
+ACH_weeded_out_DESC,Escape the Weed-Kraken
+ACH_deaf_ears_NAME,Deaf Ears
+ACH_deaf_ears_DESC,Silence the Siren
+ACH_nine_seas_NAME,Nine Seas
+ACH_nine_seas_DESC,Enter all nine regions in one voyage
+ACH_cartographer_NAME,Cartographer
+ACH_cartographer_DESC,Ink 80% of a chart in one voyage
+ACH_smugglers_welcome_NAME,Smuggler's Welcome
+ACH_smugglers_welcome_DESC,Find 3 secret coves in one voyage
+ACH_x_marks_NAME,X Marks
+ACH_x_marks_DESC,Dig 5 treasures in one voyage
+ACH_galleon_captain_NAME,Galleon Captain
+ACH_galleon_captain_DESC,Own a galleon
+ACH_ship_of_the_line_NAME,Ship of the Line
+ACH_ship_of_the_line_DESC,Own a man-o'-war
+ACH_by_a_hair_NAME,By a Hair
+ACH_by_a_hair_DESC,Dock during a last stand
+ACH_last_tide_NAME,Last Tide
+ACH_last_tide_DESC,Reach the LAST TIDE Threat tier
+LOGBOOK_HEAD,SHIP'S LOG
+LOGBOOK_TITLE,"Log of the {0}"
+LOGBOOK_LOST,"Lost on Day {0}, {1} · {2}"
+LOGBOOK_DAYS,Days survived
+LOGBOOK_GOLD,Gold earned
+LOGBOOK_SUNK,Ships sunk
+LOGBOOK_PORTS,Ports visited
+LOGBOOK_LEAGUES,Leagues sailed
+LOGBOOK_TRADE,Best single trade
+LOGBOOK_TRADE_VALUE,"{0} gold on {1}"
+LOGBOOK_NONE,none
+LOGBOOK_TREASURES,Treasures dug
+LOGBOOK_COVES,Secret coves found
+LOGBOOK_BEST,"A personal best on {0}"
+LOGBOOK_EARNED,"Earned this voyage: {0}"
+LOGBOOK_EARNED_HEAD,Honours earned this voyage
+LOGBOOK_NEW,New voyage
+LOGBOOK_TITLE_BTN,Return to the title
+PAUSE_TITLE,Paused
+PAUSE_RESUME,Resume · Esc
+PAUSE_SAVE_QUIT,Save and quit to the title
+PAUSE_QUIT,Quit to the desktop · Q
+PAUSE_WHERE,"the {0} · {1} · {2}"
+HINT_first_sail,"Make sail: [[SailUp]] sets more canvas, [[SailDown]] takes it in. She goes nowhere furled."
+HINT_wind_rose,"The blue arrow on the rose is the wind; the red wedge is where she cannot sail. Sail across the wind or with it, never into it."
+HINT_irons,"In irons: the sails cannot fill this close to the wind. Turn away with [[Port]] or [[Starboard]] until they draw."
+HINT_tack,"To go upwind, zigzag: sail close-hauled, then turn through the wind with speed on, and settle on the other side."
+HINT_dock,"[[Dock]] docks inside a harbour ring. Buy what is cheap here and sell it where it is wanted."
+HINT_trade,"Prices move as you buy and sell, and drift back over days. The chart ([[Chart]]) remembers what you saw."
+HINT_hostile,"A hostile sail. Hold [[FirePort]] or [[FireStarboard]] to aim a broadside and release to fire; ram with speed on if you must."
+HINT_leak,"Water in the hold: [[Order3]] sends hands to the pumps and carpenters to the leaks; [[Order4]] goes back to balanced. A shipwright mends the rest."
+HINT_night,"Night: your lantern is lit, so you see farther but are seen from afar. [[Lantern]] douses it to slip past unseen."
+HINT_threat,"The bar at the top is the Threat. The sea grows crueller by the day, whatever you do."
+HINT_chart,"[[Chart]] opens the chart: pins, rumours, cove hints and bottle maps live there."
+HINT_spyglass,"Hold the right mouse button to raise the spyglass toward the cursor."
+HINT_storm,"A storm: shorten sail before the wind tears it, and keep the bow to the swells."
+OPT_TITLE,Options
+OPT_DISPLAY,Display
+OPT_FULLSCREEN,Fullscreen
+OPT_RESOLUTION,Window size
+OPT_UI_SCALE,UI scale
+OPT_SOUND,Sound
+OPT_MASTER,Master
+OPT_AMBIENCE,Ambience
+OPT_SFX,Effects
+OPT_ACCESS,Accessibility
+OPT_COLORBLIND,Colour-blind-safe colours
+OPT_HINTS,First-voyage hints
+OPT_CONTROLS,Controls
+OPT_ON,On
+OPT_OFF,Off
+OPT_RESET_KEYS,Reset keys to defaults
+OPT_PRESS_KEY,press a key
+OPT_CAPTURING,"Press a key for {0} · Esc keeps the old one"
+OPT_FIXED_KEYS,"Fixed: right mouse button raises the spyglass · Esc pauses · wheel zooms"
+OPT_GROUP_SAILING,Sailing
+OPT_GROUP_GUNS,Guns
+OPT_GROUP_CREW,Crew
+OPT_GROUP_SHIP,The ship
+ACT_SailUp,Set more sail
+ACT_SailDown,Take in sail
+ACT_Port,Helm to port
+ACT_Starboard,Helm to starboard
+ACT_FirePort,Port broadside
+ACT_FireStarboard,Starboard broadside
+ACT_Crew,Crew panel
+ACT_Lantern,Lantern
+ACT_Dock,"Dock · dig · salvage"
+ACT_Chart,Chart
+ACT_Order1,Order: battle
+ACT_Order2,Order: make sail
+ACT_Order3,Order: repair
+ACT_Order4,Order: balanced
+TITLE_OPTIONS,Options
+PAUSE_OPTIONS,Options
+HUD_KEYS,"{0} / {1} sail · {2} / {3} helm · {4} / {5} broadsides · RMB spyglass · {6}-{7} / {8} crew · {9} lantern · {10} dock · {11} chart · Esc pause"
+NOTICE_RESCUE_SPENT,"The harbour will not take her in twice. Hold her afloat or find another port."
+HUD_WIND_KN,"{0:0} kn"
+HUD_WIND_FROM,"from {0}"
+HUD_DAY_N,"Day {0}"
+HUD_WATCH,"{0} watch"
+HUD_THREAT,Threat
+HUD_TIER_RISES,The sea grows meaner
+HUD_GOLD_WORD,gold
+HUD_HOLD_SHORT,"{0}/{1}"
+HUD_CREW_SHORT,"{0}/{1}"
+HUD_KNOTS,kn
+HUD_STATION_0,guns
+HUD_STATION_1,sails
+HUD_STATION_2,repair
+HUD_STATION_3,pumps
+ORDER_NAME_BATTLE,Battle stations
+ORDER_NAME_MAKESAIL,Make sail
+ORDER_NAME_REPAIR,Repair & pump
+ORDER_NAME_BALANCED,Balanced
+ORDER_NAME_CUSTOM,Custom
+HUD_LEGEND_SAIL,sail
+HUD_LEGEND_HELM,helm
+HUD_LEGEND_FIRE,broadsides
+HUD_LEGEND_SPYGLASS,spyglass
+HUD_LEGEND_ORDERS,orders
+HUD_LEGEND_CREW,crew
+HUD_LEGEND_LANTERN,lantern
+HUD_LEGEND_DOCK,dock
+HUD_LEGEND_CHART,chart
+HUD_LEGEND_PAUSE,pause
+HUD_KEY_RMB,RMB
+HUD_KEY_ESC,Esc
+HUD_STAND_TITLE,Last stand
+HUD_STAND_HARBOUR,"{0} · {1} m · about {2} s at this speed"
+HUD_STAND_HARBOUR_FAR,"{0} · {1} m · too far at this speed ({2} s)"
+HUD_STAND_NO_HARBOUR,No harbour on your chart will take her in
+HUD_MARK,"{0} · {1} m"
+HUD_MARK_MORE,"{0} +{1} · {2} m"
+HUD_MARK_REPORTED,"{0} · lookout"
+HUD_STAND_PUMP,every spare hand to the pumps
+TITLE_VOYAGE_HEAD,A New Voyage
+TITLE_NAME_PLACEHOLDER,Her name
+TITLE_ABANDON_HEAD,Abandon the saved voyage?
+TITLE_ABANDON_LINE,"The {0} is saved on Day {1}. A new voyage writes over her at its first harbour, and she is lost for good."
+TITLE_ABANDON_LINE_NONAME,"A voyage is saved. A new voyage writes over it at its first harbour, and it is lost for good."
+TITLE_ABANDON_NO,Keep her
+TITLE_ABANDON_YES,Abandon her and set sail
+TITLE_ANOTHER_TIP,Draw another name
+LOG_BEST_DAYS,"{0} days"
+LOG_BEST_LOST,"lost {0} · {1}"
+LOG_BEST_SHIP,"the {0} · {1}"
+LOG_REWARD,"unlocks the {0}"
+LOG_REWARD_HAVE,"{0} unlocked"

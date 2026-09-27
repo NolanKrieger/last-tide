@@ -1,0 +1,30 @@
+# Balance evidence (autopilot voyages, GDD §11 targets)
+
+Method: `scratch/balance` runs `Autopilot` voyages headless in parallel (`dotnet run -c Release -- <preset> <runs> <seed> <maxDays>`),
+one world per seed, until the ship is lost or the day cap. It records days survived, cause, gold, hull, visits, trades,
+fights, flights, hits, digs, upgrades and the goods traded (`scratch/balance/out/*.jsonl`). The autopilot is a
+yardstick (a cautious, competent trader), not a human; Nolan's playtests decide feel. Targets (GDD §11): good runs
+reach Day 25+ on Calm Seas, Day 15–20 on Rough Seas, Day 10–12 on Tempest; no single route or hull dominates; the
+lean start (200 gold, 4 crew) is survivable.
+
+## Log
+
+| When | Build | Preset · runs · cap | Days p10 / p25 / p50 / p75 / p90 | Alive at cap | Causes | Economy | Notes |
+|---|---|---|---|---|---|---|---|
+| 2026-09-23 11:24 | first pilot, stock director | Rough · 24 · 30 | 3.4 / 13.5 / 30 / 30 / 30 | 16 | water 6, guns 1, eruption 1 | gold median 0, max 200, trades 3.5, flights 26 | The pilot survives by fleeing and sheltering but never grows: a lone pirate sloop (4 guns, 6 crew) chases from Day 1.4 without pause. |
+| 2026-09-23 11:36 | early hunters half strength, cap 1+⌊Threat⌋, 180 s patience | Rough · 32 · 30 | 3.6 / 11.2 / 30 / 30 / 30 | 19 | water 6, eruption 3, guns 3, serpent 1 | gold median 0, max 200, trades 3.3, flights 26 | Survival unchanged, economy still dead: the pilot invested too little and sold too rarely (traced: 46% of time sheltering, 39% exploring). |
+| 2026-09-23 12:10 | + 150 s quiet after a hunter leaves; pilot invests/sells/carries/fights like a player, repairs before sailing | Rough · 48 · 30 | 1.5 / 4.7 / 14.1 / 30 / 30 | 17 | water 16 (median day 4.7), guns 7, eruption 5, serpent 2, kraken 1 | gold median 24, trades 8.2, upgrades 3.7, 5 cutters bought, fights 0.1, flights 11.9 | The economy moves at last; early water deaths dominate (shot while fleeing, then foundered). 5 runs threw a NullReferenceException (being fixed). |
+| 2026-09-23 11:52–11:58 | + pumps while fleeing, hull-change null fix | Rough · 200 · 30 | 6.2 / 10.4 / 19.4 / 30 / 30 | 68 | water 58, guns 39, kraken 13, serpent 12, eruption 6, croc 3 | gold median 13; 27 of 200 grew past 200 gold; 11 bought a bigger hull; trades 9.5, upgrades 4.1 | Inflated: a foundering ship reaching a harbour is rescued **without limit**, so a broke 1-HP sloop at a port cannot die (seed 4010 sat at hull 1 / gold 0 / crew 1 from Day 14 to the cap). Fixed next: one rescue per port per voyage. |
+| 2026-09-23 11:55 | same | Calm · 100 · 40 | 4.1 / 11.6 / 22.1 / 40 / 40 | 36 | water 26, guns 16, kraken 8, croc 5, serpent 5 | gold median 8; 16 grew; 10 bigger hulls | Same inflation. |
+| 2026-09-23 11:56 | same | Tempest · 100 · 20 | 4.1 / 8.6 / 14.4 / 20 / 20 | 41 | water 31, guns 15, kraken 6 | gold median 24; 10 grew; 2 schooners | Same inflation; 41% alive at Day 20 is not credible against a Day 10–12 target. |
+| 2026-09-23 12:04 | + harbour rescue once per port | Rough · 200 · 30 | 3.1 / 9.0 / 15.5 / 30 / 30 | 50 | water 77, guns 35, serpent 14, kraken 12, eruption 8, croc 3 | gold median 17; 27 grew past 200; 11 bigger hulls; trades 8.9, fights 0.04, flights 13.1 | **Current.** Median near the Rough target; the top quartile runs to the cap. |
+| 2026-09-23 12:06 | same | Calm · 100 · 40 | 3.9 / 8.9 / 15.7 / 39.4 / 40 | 24 | water 38, guns 14, kraken 8, croc 5, serpent 5, eruption 5 | gold median 20; 15 grew; 9 bigger hulls | **Current.** Median well under the Day 25+ target; early deaths look the same on every sea. |
+| 2026-09-23 12:07 | same | Tempest · 100 · 20 | 3.0 / 6.6 / 11.6 / 20 / 20 | 35 | water 37, guns 15, kraken 6, croc 3 | gold median 24; 10 grew; 2 schooners | **Current.** Median on target (10–12); 35% still reach Day 20. |
+
+## Reading the current numbers (2026-09-23)
+
+- **Medians** land near the Rough (15.5 vs 15–20) and Tempest (11.6 vs 10–12) targets. **Calm's median (15.7) is far below its Day 25+ target**: the first ten days play the same on every preset because Threat only reaches 1.9–2.2 by Day 10 whichever the growth rate, and that early game is where most autopilot voyages die — 77 of 200 Rough losses are "foundered" (shot while fleeing, then the water won). The preset difference only shows in the tails.
+- **The top quartile reaches the day cap on all three seas.** The autopilot's strongest habit is sheltering inside a Crown fort's ring, where hunters give up after 90 s and the fort's guns fire on them. A human will find the same trick. Candidate levers for the next round: hunters at high Threat should not give up at forts so readily (or a fort's protection should scale down with Threat), and hunter packs (Threat 3.5+) should keep a blockade.
+- **The lean start rarely compounds**: only 27 of 200 Rough voyages ever exceed the starting 200 gold, and 11 buy a bigger hull. The autopilot is a cautious trader, so this is a caution rather than a verdict — but wages (≈16 gold a day for four hands and their provisions) eat most of a sloop-load's margin when a hunter costs two days of fleeing. Nolan's playtests decide whether the first days feel tight or tedious.
+- **No route or hull dominates**: the goods traded spread across tools, cloth, rum, hemp rope, molasses, sugar, coffee, muskets and spices; every voyage starts in a sloop and few outgrow it, which is the real imbalance to watch.
+- **Determinism and stability**: 0 errors in 400 voyages after the hull-change fix; each 30-day voyage costs ~1.3 s of one core, so a thousand per preset is a ~5-minute batch on this PC.
