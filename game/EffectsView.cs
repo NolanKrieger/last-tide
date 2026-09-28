@@ -157,7 +157,9 @@ public partial class EffectsView : Node2D
                     Add(Kind.Ring, at, Vector2.Zero, 1.2f, 18, water: true);
                     Add(Kind.Ring, at, Vector2.Zero, 0.8f, 10, 0.15f, water: true);
                     for (int i = 0; i < 6; i++) Add(Kind.Droplet, at, Rand(60), 0.6f, 2, water: false);
-                    Shake = Mathf.Max(Shake, 4f + (float)e.Strength);
+                    // Only her own blows shake the glass: other hulls grinding (or bumping ice) out of sight must not.
+                    if (e.ShipId == world.Ship.Id || e.Pos.DistanceTo(world.Ship.Pos) < world.Ship.Hull.Length * 2)
+                        Shake = Mathf.Max(Shake, 4f + (float)e.Strength);
                     break;
                 case CombatEventType.Sink: Sinking(e, at); break;
                 case CombatEventType.Collect:

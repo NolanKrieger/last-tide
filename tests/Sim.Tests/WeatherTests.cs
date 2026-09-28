@@ -7,7 +7,7 @@ public class WeatherTests
     static Vec2 FindPoint(World w, RegionType region, Func<Vec2, bool> ok)
     {
         var seed = w.Map.RegionOf(region).Seed;
-        for (int r = 0; r < 900; r += 60)
+        for (int r = 0; r < 3000; r += 60)
             for (double a = 0; a < Angles.Tau; a += 0.5)
             {
                 var p = seed + Vec2.FromAngle(a) * r;
@@ -167,6 +167,7 @@ public class WeatherTests
         double night = w.Director.Credits - c1;
         Assert.True(night > day * 1.35, $"night {night:F2} vs day {day:F2}");
 
+        w.Weather.Storms.Clear();   // whatever the sky brewed on its own so far
         w.Weather.Storms.Add(new StormCell { Pos = w.Ship.Pos + new Vec2(400, 0), Radius = 300, Strength = 0.7, Life = 100, Age = 5 });
         w.Tick(new ShipInput(0, 0, ToggleLantern: true));
         w.Ship.TornSails = true;

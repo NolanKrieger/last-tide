@@ -718,15 +718,21 @@ public partial class ShipPreview : Control
         var back = -new Vector2(Mathf.Cos((float)ship.Heading), Mathf.Sin((float)ship.Heading));
         var side = new Vector2(-back.Y, back.X);
         float L = (float)ship.Hull.Length * Ink.PxPerM * scale * 0.45f;
+        // It fades out astern and ends inside the patch of sea (it used to run on over the bare paper).
+        float ea = Size.X * 0.46f, eb = (Size.Y - 30) * 0.42f;
+        float edge = 1 / Mathf.Sqrt(back.X * back.X / (ea * ea) + back.Y * back.Y / (eb * eb));
+        float run = Mathf.Max(12, edge * 0.9f - L - 28);
+        var cols = new Color[8];
+        for (int i = 0; i < cols.Length; i++) cols[i] = wake with { A = wake.A * (1 - i / 7f) };
         for (int s = -1; s <= 1; s += 2)
         {
             var w = new Vector2[8];
             for (int i = 0; i < w.Length; i++)
             {
                 float t = i / 7f;
-                w[i] = c + back * (L + t * Size.X * 0.32f) + side * s * (4 + t * 26 + Mathf.Sin(time * 3 + i) * 1.5f);
+                w[i] = c + back * (L + t * run) + side * s * (4 + t * 22 + Mathf.Sin(time * 3 + i) * 1.5f);
             }
-            DrawPolyline(w, wake, 2f, true);
+            DrawPolylineColors(w, cols, 2f, true);
         }
         if (name.Length > 0)
             DrawString(Fonts.Italic, new Vector2(0, Size.Y - 8), name, HorizontalAlignment.Center, Size.X, 22, Ink.Black);

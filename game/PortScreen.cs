@@ -5,7 +5,7 @@ using LastTide.Sim;
 namespace LastTide;
 
 /// <summary>
-/// The port ledger that opens on docking (GDD §13): Market, Shipwright, Tavern, Cast off.
+/// The port ledger that opens on docking (GDD §13): Market, Shipwright, Tavern, Harbour office, Cast off.
 /// Every button issues a <see cref="PortCommand"/> to the sim and the page re-reads the world. Prices shown are the
 /// prices charged: standing and the quartermaster are applied exactly as <see cref="World"/> applies them.
 /// </summary>
@@ -63,6 +63,12 @@ public partial class PortScreen : CanvasLayer
     Button hire1 = null!, hire5 = null!, rumor = null!, buyMap = null!;
     readonly List<(OfficerType Type, Label Name, UiPips Tier, Label Effect, Label Terms, Label Aboard, Button Hire, Button Dismiss)> officerRows = new();
     bool rumorThisVisit;
+    // Harbour office
+    Label boardEmpty = null!, heldHead = null!, heldNone = null!, bountyLine = null!, arrivalLine = null!;
+    PanelContainer arrivalCard = null!;
+    Label[] receiptLines = Array.Empty<Label>();
+    readonly List<(PanelContainer Card, TextureRect Icon, Label Title, Label Cargo, Label Terms, Button Sign)> offerRows = new();
+    readonly List<(PanelContainer Card, Label Title, Label Detail, Button Abandon)> contractRows = new();
 
     public bool IsOpen => Visible;
     public int Page => page;
@@ -78,7 +84,12 @@ public partial class PortScreen : CanvasLayer
     public string CannonOffer => buyCannon.Text;
     public string HullOffer(string id) => hullRows.First(h => h.Hull.Id == id).Buy.Text;
     public Button HireFive => hire5;
-    public Button MoreButton = null!;
+    /// <summary>The harbour office's Sign button for a board slot, and Give up for a contract in hand (self-test).</summary>
+    public Button SignButton(int slot) => offerRows[slot].Sign;
+    public Button AbandonButton(int index) => contractRows[index].Abandon;
+    /// <summary>The tavern's Hire button for an officer type (the self-test clicks the cartographer's).</summary>
+    public Button OfficerHireButton(OfficerType type) => officerRows.First(r => r.Type == type).Hire;
+    public Button MoreButton = null!, MaxButton = null!;
 
     public void Init(World w, Font f)
     {
@@ -106,17 +117,28 @@ public partial class PortScreen : CanvasLayer
         var col = Parchment.Column(6);
         sheet.AddChild(col);
 
-        col.AddChild(BuildHeader());
+        headerInset = Inset(BuildHeader());
+        col.AddChild(headerInset);
         col.AddChild(BuildTabs());
-        pages = new Control[] { BuildMarket(), BuildShipwright(), BuildTavern() };
+        pages = new Control[] { BuildMarket(), BuildShipwright(), BuildTavern(), BuildOffice() };
         foreach (var p in pages)
         {
             p.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
             col.AddChild(p);
         }
         col.AddChild(new UiDivider(false, 6));
-        col.AddChild(BuildFooter());
+        footInset = Inset(BuildFooter());
+        col.AddChild(footInset);
         ShowPage(0);
+    }
+
+    MarginContainer headerInset = null!, footInset = null!;
+
+    static MarginContainer Inset(Control c)
+    {
+        var m = new MarginContainer();
+        m.AddChild(c);
+        return m;
     }
 
     void Layout()
@@ -135,6 +157,10 @@ public partial class PortScreen : CanvasLayer
             sheet.AddThemeStyleboxOverride("panel", pad);
         }
         else sheet.RemoveThemeStyleboxOverride("panel");
+        // On a short page the rim is thin, so the purse and the footer lines step in clear of the corner scrollwork.
+        foreach (var inset in new[] { headerInset, footInset })
+            foreach (var side in new[] { "margin_left", "margin_right" })
+                inset.AddThemeConstantOverride(side, small ? 26 : 4);
         title.PlateHeight = small ? 66 : 100;
         title.FontSize = small ? 28 : 40;
         crest.CustomMinimumSize = small ? new Vector2(40, 50) : new Vector2(60, 74);
@@ -193,6 +219,8 @@ public partial class PortScreen : CanvasLayer
         purse.AddChild(Parchment.Picture(Parchment.Tex("icon-gold"), 36, 30));
         goldLine = Parchment.L("", "Big", HorizontalAlignment.Right);
         purse.AddChild(goldLine);
+        arrivalLine = Parchment.L("", "Caption", HorizontalAlignment.Right);
+        right.AddChild(arrivalLine);
         var hold = Parchment.Row(8);
         hold.Alignment = BoxContainer.AlignmentMode.End;
         right.AddChild(hold);
@@ -207,10 +235,10 @@ public partial class PortScreen : CanvasLayer
     Control BuildTabs()
     {
         var bar = Parchment.Row(4);
-        var names = new[] { "PORT_TAB_MARKET", "PORT_TAB_SHIPWRIGHT", "PORT_TAB_TAVERN" };
-        tabs = new Button[3];
+        var names = new[] { "PORT_TAB_MARKET", "PORT_TAB_SHIPWRIGHT", "PORT_TAB_TAVERN", "PORT_TAB_OFFICE" };
+        tabs = new Button[names.Length];
         var group = new ButtonGroup();
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < names.Length; i++)
         {
             int idx = i;
             tabs[i] = Parchment.B(Text.Get(names[i]), () => ShowPage(idx), "RibbonTab");
@@ -284,6 +312,7 @@ public partial class PortScreen : CanvasLayer
         detailName = Parchment.L("", "Big");
         names.AddChild(detailName);
         detailGroup = Parchment.L("", "Caption");
+        detailGroup.AutowrapMode = TextServer.AutowrapMode.WordSmart;   // "Ship's consumables · compact, 4 to a slot" on a narrow pane
         names.AddChild(detailGroup);
         info.AddChild(new UiDivider(true, 18));
         var prices = new GridContainer { Columns = 2 };
@@ -328,6 +357,10 @@ public partial class PortScreen : CanvasLayer
         qrow.AddChild(qty);
         MoreButton = Parchment.B("+", () => qty.Value += 1, "Flat", 24);
         qrow.AddChild(MoreButton);
+        // All the way in one click: as much as the purse, the hold and the stock allow, or everything she holds (Sell
+        // never sells more than she has, so the one setting serves both).
+        MaxButton = Parchment.B(Text.Get("PORT_QTY_MAX"), () => qty.Value = qty.MaxValue, "Flat", 18);
+        qrow.AddChild(MaxButton);
         detailQty = Parchment.L("", "Big");
         detailQty.CustomMinimumSize = new Vector2(64, 0);
         detailQty.HorizontalAlignment = HorizontalAlignment.Right;
@@ -486,7 +519,7 @@ public partial class PortScreen : CanvasLayer
             list.AddChild(card);
             var r = Parchment.Row(10);
             card.AddChild(r);
-            r.AddChild(new HullSketch(hull, (float)(hull.Length / longest)));
+            r.AddChild(new HullSketch(hull, (float)(hull.Length / longest), () => world.Player.Loadout[Cosmetics.SlotIndex("hull")]));
             var t = Parchment.Column(0);
             t.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
             r.AddChild(t);
@@ -496,10 +529,11 @@ public partial class PortScreen : CanvasLayer
             stats.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
             t.AddChild(stats);
             var niche = Parchment.L(Text.Get("PORT_HULL_NICHE", hull.Speed.ToString("0.00", CultureInfo.InvariantCulture), hull.PointDeg, Text.Get("RIG_" + hull.Rig.ToString().ToLowerInvariant()), hull.OfficerSlots), "Flavour");
-            niche.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
+            niche.AutowrapMode = TextServer.AutowrapMode.WordSmart;   // wraps on a narrow page rather than losing its end
             t.AddChild(niche);
             var id = hull.Id;
-            var b = Parchment.B("", () => Do(new PortCommand(PortAction.BuyHull, Text: id)));
+            Button b = null!;
+            b = Parchment.B("", () => TwoStep(b, () => Do(new PortCommand(PortAction.BuyHull, Text: id))));
             b.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
             b.CustomMinimumSize = new Vector2(120, 0);
             r.AddChild(b);
@@ -568,8 +602,9 @@ public partial class PortScreen : CanvasLayer
         rightScroll.AddChild(right);
         officerHead = Parchment.L("", "Head");
         right.AddChild(officerHead);
-        string[] portraits = { "lookout", "marines", "quartermaster" };
-        foreach (var type in Enum.GetValues<OfficerType>())
+        string[] portraits = { "lookout", "marines", "quartermaster", "cartographer" };
+        // The cartographer first: without him the chart stays shut, so he is the one a new captain looks for.
+        foreach (var type in Enum.GetValues<OfficerType>().OrderBy(t => t == OfficerType.Cartographer ? 0 : 1))
         {
             var card = new PanelContainer { ThemeTypeVariation = "Card" };
             right.AddChild(card);
@@ -597,12 +632,181 @@ public partial class PortScreen : CanvasLayer
             bcol.Alignment = BoxContainer.AlignmentMode.Center;
             r.AddChild(bcol);
             var hire = Parchment.B("", () => { var o = world.TavernOfficers(world.Docked!).First(x => x.Type == type); Do(new PortCommand(PortAction.HireOfficer, Amount: (int)type * 10 + o.Tier)); });
-            var dismiss = Parchment.B(Text.Get("PORT_DISMISS"), () => Do(new PortCommand(PortAction.DismissOfficer, Amount: (int)type)), "Flat");
+            Button dismiss = null!;
+            dismiss = Parchment.B(Text.Get("PORT_DISMISS"), () => TwoStep(dismiss, () => Do(new PortCommand(PortAction.DismissOfficer, Amount: (int)type))), "Flat");
             bcol.AddChild(hire);
             bcol.AddChild(dismiss);
             officerRows.Add((type, name, tier, effect, terms, aboard, hire, dismiss));
         }
         return box;
+    }
+
+    // ------------------------------------------------------------------ harbour office
+
+    Control BuildOffice()
+    {
+        var box = Parchment.Row(20);
+        var leftScroll = new ScrollContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsStretchRatio = 1.2f, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, FollowFocus = true };
+        box.AddChild(leftScroll);
+        var left = Parchment.Column(8);
+        left.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        leftScroll.AddChild(left);
+        left.AddChild(Parchment.L(Text.Get("PORT_OFFICE_BOARD"), "Head"));
+        var note = Parchment.L(Text.Get("PORT_OFFICE_BOARD_NOTE"), "Flavour");
+        note.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        note.CustomMinimumSize = new Vector2(300, 0);
+        left.AddChild(note);
+        for (int i = 0; i < 3; i++)
+        {
+            var card = new PanelContainer { ThemeTypeVariation = "Card" };
+            left.AddChild(card);
+            var r = Parchment.Row(12);
+            card.AddChild(r);
+            var icon = Parchment.Picture(null, 56, 56);
+            r.AddChild(icon);
+            var t = Parchment.Column(2);
+            t.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            r.AddChild(t);
+            var title = Parchment.L("", "Head");
+            t.AddChild(title);
+            var cargo = Parchment.L("", "Caption");
+            cargo.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            cargo.CustomMinimumSize = new Vector2(220, 0);
+            t.AddChild(cargo);
+            var terms = Parchment.L("", "Flavour");
+            terms.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            terms.CustomMinimumSize = new Vector2(220, 0);
+            t.AddChild(terms);
+            int slot = i;
+            var sign = Parchment.B("", () => Do(new PortCommand(PortAction.SignContract, Amount: slot)));
+            sign.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+            sign.CustomMinimumSize = new Vector2(130, 0);
+            r.AddChild(sign);
+            offerRows.Add((card, icon, title, cargo, terms, sign));
+        }
+        boardEmpty = Parchment.L(Text.Get("PORT_OFFICE_EMPTY"), "Flavour");
+        left.AddChild(boardEmpty);
+
+        var rightScroll = new ScrollContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, FollowFocus = true };
+        box.AddChild(rightScroll);
+        var right = Parchment.Column(8);
+        right.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        rightScroll.AddChild(right);
+        heldHead = Parchment.L("", "Head");
+        right.AddChild(heldHead);
+        for (int i = 0; i < World.MaxContracts; i++)
+        {
+            var card = new PanelContainer { ThemeTypeVariation = "CardOn" };
+            right.AddChild(card);
+            var r = Parchment.Row(10);
+            card.AddChild(r);
+            var t = Parchment.Column(0);
+            t.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+            r.AddChild(t);
+            var title = Parchment.L("", "Head");
+            title.AddThemeFontSizeOverride("font_size", 19);
+            title.AutowrapMode = TextServer.AutowrapMode.WordSmart;   // the deadline is the line's last words: never cut it
+            title.CustomMinimumSize = new Vector2(220, 0);
+            t.AddChild(title);
+            var detail = Parchment.L("", "Flavour");
+            detail.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            detail.CustomMinimumSize = new Vector2(220, 0);
+            t.AddChild(detail);
+            int index = i;
+            Button abandon = null!;
+            abandon = Parchment.B(Text.Get("PORT_CONTRACT_ABANDON"), () => TwoStep(abandon, () => Do(new PortCommand(PortAction.AbandonContract, Amount: index))), "Flat");
+            abandon.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+            r.AddChild(abandon);
+            contractRows.Add((card, title, detail, abandon));
+        }
+        heldNone = Parchment.L(Text.Get("PORT_OFFICE_NONE_HELD"), "Flavour");
+        right.AddChild(heldNone);
+
+        Card(right, Parchment.Crest(Faction.Crown, false), 48, 60, out var bt);
+        bt.AddChild(Parchment.L(Text.Get("PORT_BOUNTY_HEAD"), "Head"));
+        bountyLine = Parchment.L("", "Flavour");
+        bountyLine.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        bountyLine.CustomMinimumSize = new Vector2(240, 0);
+        bt.AddChild(bountyLine);
+
+        arrivalCard = Card(right, Parchment.Tex("icon-gold"), 48, 40, out var at);
+        at.AddChild(Parchment.L(Text.Get("PORT_ARRIVAL_HEAD"), "Head"));
+        receiptLines = new Label[5];
+        for (int i = 0; i < receiptLines.Length; i++)
+        {
+            receiptLines[i] = Parchment.L("", "Flavour");
+            receiptLines[i].AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            receiptLines[i].CustomMinimumSize = new Vector2(240, 0);
+            at.AddChild(receiptLines[i]);
+        }
+        return box;
+    }
+
+    static Texture2D? ContractIcon(ContractKind k) => Parchment.Tex(k switch { ContractKind.Dispatch => "icon-quill", ContractKind.Contraband => "icon-tankard", _ => "icon-crate" });
+
+    /// <summary>One line of the arrival account: what the office paid (or customs took) as she came alongside.</summary>
+    string ReceiptText(Receipt r) => r.Key switch
+    {
+        "RECEIPT_DELIVERED" or "RECEIPT_SMUGGLED" => Text.Get(r.Key, r.Gold, world.Map.Ports[r.Arg].Name),
+        "RECEIPT_BOUNTY" => Text.Get(r.Key, r.Gold, r.Arg),
+        "RECEIPT_CAUGHT" => Text.Get(r.Key, -r.Gold),
+        _ => Text.Get(r.Key, r.Gold),
+    };
+
+    void RefreshOffice(Port port)
+    {
+        var player = world.Player;
+        var ship = world.Ship;
+        var offers = world.ContractOffers(port);
+        bool any = false, full = player.Contracts.Count >= World.MaxContracts;
+        for (int i = 0; i < offerRows.Count; i++)
+        {
+            var (card, icon, otitle, cargo, terms, sign) = offerRows[i];
+            var c = i < offers.Length ? offers[i] : null;
+            card.Visible = c != null;
+            if (c == null) continue;
+            any = true;
+            var dest = world.Map.Ports[c.To];
+            string key = ContractDef.Of(c.Kind).Key;
+            bool smuggle = c.Kind == ContractKind.Contraband;
+            icon.Texture = ContractIcon(c.Kind);
+            otitle.Text = Text.Get("PORT_OFFER_TITLE", Text.Get("CONTRACT_" + key), dest.Name);
+            otitle.AddThemeColorOverride("font_color", smuggle ? Ink.Red : Ink.Black);
+            double days = world.SeaDistance(c.From, c.To) / World.PassageMetresPerDay;
+            cargo.Text = Text.Get("PORT_OFFER_CARGO_" + key, c.Slots, Text.Get("REGION_" + RegionDef.Of(dest.Region).Key), Parchment.N(Math.Max(0.5, Math.Round(days * 2) / 2), "0.#"));
+            terms.Text = smuggle ? Text.Get("PORT_OFFER_TERMS_SMUGGLE", c.Pay, Parchment.DayWatch(c.Deadline))
+                : Text.Get("PORT_OFFER_TERMS", c.Pay, c.Advance, Parchment.DayWatch(c.Deadline));
+            bool room = player.SlotsUsed + c.Slots <= ship.CargoCapacity + 1e-9;
+            sign.Text = full ? Text.Get("PORT_OFFER_FULL") : !room ? Text.Get("PORT_OFFER_NOROOM") : Text.Get("PORT_OFFER_SIGN");
+            sign.Disabled = full || !room;
+        }
+        boardEmpty.Visible = !any;
+        heldHead.Text = Text.Get("PORT_OFFICE_HELD", player.Contracts.Count, World.MaxContracts);
+        for (int i = 0; i < contractRows.Count; i++)
+        {
+            var (card, ctitle, detail, _) = contractRows[i];
+            card.Visible = i < player.Contracts.Count;
+            if (!card.Visible) continue;
+            var c = player.Contracts[i];
+            string key = ContractDef.Of(c.Kind).Key;
+            ctitle.Text = Text.Get("PORT_CONTRACT_LINE", Text.Get("CONTRACT_" + key), world.Map.Ports[c.To].Name, Parchment.DayWatch(c.Deadline));
+            ctitle.AddThemeColorOverride("font_color", c.Kind == ContractKind.Contraband ? Ink.Red : Ink.Black);
+            detail.Text = Text.Get("PORT_CONTRACT_DETAIL_" + key, c.Slots, c.Pay - c.Advance)
+                + (c.Advance > 0 ? " " + Text.Get("PORT_CONTRACT_FORFEIT", c.Advance) : "");
+        }
+        heldNone.Visible = player.Contracts.Count == 0;
+        bountyLine.Text = player.BountyOwed > 0 ? Text.Get("PORT_BOUNTY_OWED", player.BountyOwed, player.BountyShips) : Text.Get("PORT_BOUNTY_NONE");
+        var receipts = world.DockReceipts;
+        arrivalCard.Visible = receipts.Count > 0;
+        for (int i = 0; i < receiptLines.Length; i++)
+        {
+            receiptLines[i].Visible = i < receipts.Count;
+            if (i < receipts.Count) receiptLines[i].Text = ReceiptText(receipts[i]);
+        }
+        int net = receipts.Sum(r => r.Gold);
+        arrivalLine.Text = net > 0 ? Text.Get("PORT_ARRIVAL_GAIN", net) : net < 0 ? Text.Get("PORT_ARRIVAL_LOSS", -net) : "";
+        arrivalLine.Visible = net != 0;
+        arrivalLine.AddThemeColorOverride("font_color", net < 0 ? Ink.Red : Parchment.Muted);
     }
 
     /// <summary>A row that wraps onto a second line when there is no room (button rows, the repair and gun cards).</summary>
@@ -687,8 +891,8 @@ public partial class PortScreen : CanvasLayer
         if (!Visible || e is not InputEventKey { Pressed: true, Echo: false } k) return;
         // The broadside keys (Q / E unless rebound) turn the ledger's pages: there is nothing to fire in port.
         string? action = Settings.Current.ActionOf(k.Keycode);
-        if (action == "FirePort") { Audio.Ui(); ShowPage((page + 2) % 3); GetViewport().SetInputAsHandled(); }
-        else if (action == "FireStarboard") { Audio.Ui(); ShowPage((page + 1) % 3); GetViewport().SetInputAsHandled(); }
+        if (action == "FirePort") { Audio.Ui(); ShowPage((page + pages.Length - 1) % pages.Length); GetViewport().SetInputAsHandled(); }
+        else if (action == "FireStarboard") { Audio.Ui(); ShowPage((page + 1) % pages.Length); GetViewport().SetInputAsHandled(); }
     }
 
     public void Select(Good g)
@@ -701,13 +905,46 @@ public partial class PortScreen : CanvasLayer
         ledger.KeepVisible();
     }
 
+    Button? armed;
+    string armedText = "";
+    ulong armedAt;
+
+    /// <summary>
+    /// What cannot be taken back (a new hull traded against hers, a contract given up, an officer dismissed) asks once
+    /// more: the first press turns the button into a red "Confirm?", a second press within four seconds acts.
+    /// </summary>
+    void TwoStep(Button b, Action act)
+    {
+        if (armed == b && Time.GetTicksMsec() - armedAt < 4000) { Disarm(); act(); return; }
+        Disarm();
+        armed = b;
+        armedText = b.Text;
+        ulong at = armedAt = Time.GetTicksMsec();
+        b.Text = Text.Get("PORT_CONFIRM");
+        b.AddThemeColorOverride("font_color", Ink.Red);
+        b.AddThemeColorOverride("font_hover_color", Ink.Red);
+        b.AddThemeColorOverride("font_focus_color", Ink.Red);
+        GetTree().CreateTimer(4).Timeout += () => { if (armed == b && armedAt == at) Disarm(); };
+    }
+
+    void Disarm()
+    {
+        if (armed is not { } b) return;
+        armed = null;
+        if (!IsInstanceValid(b)) return;
+        b.Text = armedText;
+        b.RemoveThemeColorOverride("font_color");
+        b.RemoveThemeColorOverride("font_hover_color");
+        b.RemoveThemeColorOverride("font_focus_color");
+    }
+
     /// <summary>Issues a command and shows why it was refused, if it was.</summary>
     public PortResult Do(PortCommand cmd)
     {
         EnsureBuilt();
         var r = world.Apply(cmd);
         message.Text = r == PortResult.Ok ? "" : Text.Get("PORT_RESULT_" + r.ToString().ToUpperInvariant());
-        if (r == PortResult.Ok && cmd.Action is PortAction.Buy or PortAction.Sell or PortAction.BuyPart or PortAction.BuyHull or PortAction.Repair or PortAction.BuyUnique or PortAction.BuyCannon or PortAction.HireOfficer or PortAction.Hire)
+        if (r == PortResult.Ok && cmd.Action is PortAction.Buy or PortAction.Sell or PortAction.BuyPart or PortAction.BuyHull or PortAction.Repair or PortAction.BuyUnique or PortAction.BuyCannon or PortAction.HireOfficer or PortAction.Hire or PortAction.SignContract)
             Audio.Instance?.Play("coins", 0.55, 0.1);
         Refresh();
         return r;
@@ -724,6 +961,7 @@ public partial class PortScreen : CanvasLayer
     public void Refresh()
     {
         if (!built || world.Docked is not { } port) return;
+        Disarm();
         var player = world.Player;
         var ship = world.Ship;
 
@@ -844,10 +1082,10 @@ public partial class PortScreen : CanvasLayer
         }
         else
         {
-            mapLine.Text = Text.Get("PORT_MAP_LINE", Text.Get("REGION_" + RegionDef.Of(world.Map.RegionAt(site.Pos).Type).Key), player.BottleMaps.Count);
+            mapLine.Text = Text.Get("PORT_MAP_LINE", Text.Get("REGION_IN_" + RegionDef.Of(world.Map.RegionAt(site.Pos).Type).Key), player.BottleMaps.Count);
             buyMap.Disabled = player.Gold < World.BottleMapPrice;
         }
-        officerHead.Text = Text.Get("PORT_OFFICERS", player.Officers.Count, ship.Hull.OfficerSlots);
+        officerHead.Text = Text.Get("PORT_OFFICERS", player.SlottedOfficers, ship.Hull.OfficerSlots);
         var offers = world.TavernOfficers(port);
         foreach (var (type, name, tier, effect, terms, aboard, hire, dismiss) in officerRows)
         {
@@ -857,11 +1095,13 @@ public partial class PortScreen : CanvasLayer
             name.Text = Text.Get("PORT_OFFICER_NAME", Text.Get("OFFICER_" + key), Text.Get("TIER_" + Officers.TierKey[offer.Tier]));
             tier.Count = offer.Tier + 1;
             effect.Text = Text.Get("OFFICER_" + key + "_EFFECT_" + offer.Tier);
-            terms.Text = Text.Get("PORT_OFFICER_TERMS", Officers.Price[offer.Tier], Officers.Wage[offer.Tier]);
+            int price = Officers.PriceOf(type, offer.Tier);
+            terms.Text = Text.Get("PORT_OFFICER_TERMS", price, Officers.WageOf(type, offer.Tier));
             aboard.Text = mine == null ? "" : Text.Get("PORT_OFFICER_HAVE", Text.Get("TIER_" + Officers.TierKey[mine.Tier]));
             aboard.Visible = mine != null;
-            hire.Text = Text.Get("PORT_OFFICER_HIRE", Officers.Price[offer.Tier]);
-            hire.Disabled = player.Gold < Officers.Price[offer.Tier] || (mine != null && mine.Tier >= offer.Tier) || (mine == null && player.Officers.Count >= ship.Hull.OfficerSlots);
+            hire.Text = Text.Get("PORT_OFFICER_HIRE", price);
+            hire.Disabled = player.Gold < price || (mine != null && mine.Tier >= offer.Tier)
+                || (mine == null && Officers.UsesSlot(type) && player.SlottedOfficers >= ship.Hull.OfficerSlots);   // the cartographer berths apart
             dismiss.Disabled = mine == null;
         }
         // Rumours: only what this tavern said on this visit (the sim keeps the last one heard anywhere).
@@ -885,6 +1125,8 @@ public partial class PortScreen : CanvasLayer
             var e = rumours[i];
             heard[i].Text = Text.Get("PORT_RUMOUR_HEARD", world.Map.Ports[e.Port].Name, Text.Get("GOOD_" + Goods.Of(e.Good).Key), Math.Round(e.Price), Math.Floor(e.Day) + 1);
         }
+
+        RefreshOffice(port);
     }
 
     /// <summary>
@@ -1244,24 +1486,35 @@ public partial class GunPorts : Control
 
 /// <summary>
 /// A hull in plan view for the shipwright's catalogue, scaled to her length against the largest hull. Uses the
-/// art-ships sprite (<c>assets/art/ships/&lt;id&gt;.png</c>, bow to the right) when it exists, else an inked outline.
+/// art-ships sprite (<c>assets/art/ships/&lt;id&gt;.png</c>, bow to the right) in her own livery (and the player's
+/// hull colour, if one is chosen), with her shadow under her; else an inked outline.
 /// </summary>
 public partial class HullSketch : Control
 {
     readonly HullDef hull;
     readonly float scale;
-    public HullSketch(HullDef h, float lengthFraction) { hull = h; scale = lengthFraction; CustomMinimumSize = new Vector2(150, 60); MouseFilter = MouseFilterEnum.Ignore; TextureFilter = TextureFilterEnum.LinearWithMipmaps; }
+    readonly Func<string>? hullKey;
+    public HullSketch(HullDef h, float lengthFraction, Func<string>? hullCosmetic = null) { hull = h; scale = lengthFraction; hullKey = hullCosmetic; CustomMinimumSize = new Vector2(156, 64); MouseFilter = MouseFilterEnum.Ignore; TextureFilter = TextureFilterEnum.LinearWithMipmaps; }
     public HullSketch() : this(Hulls.Sloop, 0.3f) { }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationVisibilityChanged && IsVisibleInTree()) QueueRedraw();   // the hull colour may have changed since
+    }
 
     public override void _Draw()
     {
-        float L = Mathf.Max(34, (Size.X - 10) * scale);
+        // Lengths keep their order, but the small hulls are drawn big enough to see their paint and deck.
+        float L = Mathf.Max(34, (Size.X - 8) * Mathf.Lerp(0.42f, 1f, scale));
         float B = L * (float)(hull.Beam / hull.Length);
         var c = Size / 2;
-        var tex = Art.Tex("ships/" + hull.Id);
+        var tex = ShipArt.Dressed(hull.Id, ShipArt.For(hull, true, Faction.FreeTraders, hullKey?.Invoke() ?? ""));
         if (tex != null)
         {
             float h = L * tex.GetHeight() / tex.GetWidth();
+            var (shadow, pad) = ShipArt.Shadow(hull.Id);
+            if (shadow != null)
+                DrawTextureRect(shadow, new Rect2(c.X - L / 2 - pad.X * L + h * 0.1f, c.Y - h / 2 - pad.Y * h + h * 0.13f, L * (1 + 2 * pad.X), h * (1 + 2 * pad.Y)), false, new Color(0.13f, 0.14f, 0.17f, 0.3f));
             DrawTextureRect(tex, new Rect2(c.X - L / 2, c.Y - h / 2, L, h), false);
             return;
         }

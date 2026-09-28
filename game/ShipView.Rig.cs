@@ -24,10 +24,10 @@ public partial class ShipView
         ["barque"] = new(new[] { new MastPlan(0.27f, 'S', 0.95f), new MastPlan(0.0f, 'S', 1f), new MastPlan(-0.27f, 'G', 0.85f, 0.22f) }, 2, 0.26f),
         ["corvette"] = new(new[] { new MastPlan(0.27f, 'S', 0.95f), new MastPlan(0.01f, 'S', 1f), new MastPlan(-0.25f, 'S', 0.8f, 0.22f) }, 2, 0.26f, Spanker: true),
         ["frigate"] = new(new[] { new MastPlan(0.28f, 'S', 0.95f), new MastPlan(0.02f, 'S', 1f), new MastPlan(-0.24f, 'S', 0.8f, 0.22f) }, 3, 0.27f, Spanker: true),
-        ["indiaman"] = new(new[] { new MastPlan(0.28f, 'S', 0.95f), new MastPlan(0.02f, 'S', 1f), new MastPlan(-0.24f, 'S', 0.78f, 0.22f) }, 2, 0.25f, Spanker: true, Spritsail: true),
+        ["indiaman"] = new(new[] { new MastPlan(0.28f, 'S', 0.95f), new MastPlan(0.02f, 'S', 1f), new MastPlan(-0.24f, 'S', 0.78f, 0.22f) }, 2, 0.25f, Spanker: true),
         ["heavy_frigate"] = new(new[] { new MastPlan(0.28f, 'S', 0.95f), new MastPlan(0.02f, 'S', 1f), new MastPlan(-0.24f, 'S', 0.8f, 0.22f) }, 3, 0.27f, Spanker: true),
         ["galleon"] = new(new[] { new MastPlan(0.30f, 'S', 0.9f), new MastPlan(0.05f, 'S', 1f), new MastPlan(-0.20f, 'L', 0.7f, 0.26f), new MastPlan(-0.37f, 'L', 0.5f, 0.18f) }, 0, 0.24f, Spritsail: true),
-        ["man_o_war"] = new(new[] { new MastPlan(0.28f, 'S', 0.95f), new MastPlan(0.02f, 'S', 1f), new MastPlan(-0.24f, 'S', 0.82f, 0.22f) }, 3, 0.26f, Spanker: true, Spritsail: true),
+        ["man_o_war"] = new(new[] { new MastPlan(0.28f, 'S', 0.95f), new MastPlan(0.02f, 'S', 1f), new MastPlan(-0.24f, 'S', 0.82f, 0.22f) }, 3, 0.26f, Spanker: true),
     };
 
     static RigPlan PlanFor(HullDef h)
@@ -75,9 +75,13 @@ public partial class ShipView
         float boomT = lee * Mathf.Clamp((awOff - 22f) * 0.55f, 4f, 82f) * Mathf.Lerp(0.25f, 1f, drawing);
         float braceT = windSide * Mathf.Clamp((180f - awOff) * 0.4f, 0f, 45f);
         if (sinkT >= 0 || ship.Sunk) { fillT = 0.1f; }
+        // She heels to leeward with the pressure in her canvas: most on a beam reach in a fresh breeze.
+        float heelT = lee * Mathf.Clamp(fillT, 0, 1) * (float)ship.SailFraction * Mathf.Clamp(awSpeed / 10f, 0, 1.3f)
+            * Mathf.Sin(Mathf.DegToRad(Mathf.Clamp(awOff, 0, 180)));
+        if (sinkT >= 0 || ship.Sunk) heelT = 0;
         if (!trimReady)
         {
-            boomDeg = boomT; braceDeg = braceT; fill = fillT;
+            boomDeg = boomT; braceDeg = braceT; fill = fillT; heel = heelT;
             trimReady = true;
             return;
         }
@@ -86,6 +90,7 @@ public partial class ShipView
         braceDeg = Mathf.Lerp(braceDeg, braceT, k);
         fill = Mathf.Lerp(fill, fillT, 1 - Mathf.Exp(-dt * 4.5f));
         luff = Mathf.Clamp(1 - Mathf.Abs(fill) * 1.6f, 0, 1);
+        heel = Mathf.Lerp(heel, heelT, 1 - Mathf.Exp(-dt * 1.2f));
     }
 
     /// <summary>Belly pulse after a sail change: a snap out and a settle.</summary>
@@ -108,7 +113,9 @@ public partial class ShipView
         float frac = (float)ship.SailFraction;
         exag = Mathf.Clamp(1f + (140f - L / px) / 160f, 1f, 1.6f);
         if (list > 0.2f) frac *= Mathf.Clamp(1 - (list - 0.2f) * 1.6f, 0, 1);   // canvas gone slack as she goes
-        float lean = listSide * B * 0.55f * list;                                 // mastheads fall toward the list
+        // Mastheads fall toward a list, lean to leeward as she heels and sway a little with the swell.
+        float roll = sinkT < 0 ? 0.035f * Mathf.Sin(time * 1.25f + ship.Id * 1.7f) : 0f;
+        float lean = listSide * B * 0.55f * list + B * (0.2f * heel + roll);
         float bow = L * 0.49f;
         float spritLen = plan.Sprit * L;
         float detail = Mathf.Clamp((B / px - 14f) / 20f, 0f, 1f);                 // fine lines only when she is big on screen
@@ -120,23 +127,48 @@ public partial class ShipView
         {
             var root = new Vector2(bow - L * 0.04f, 0);
             var tip = new Vector2(bow + spritLen, 0);
-            m.Taper(root, tip, sparW * 1.3f, sparW * 0.6f, Spar, Spar);
+            SparLine(m, root, tip, sparW * 1.3f, sparW * 0.6f);
         }
 
-        // Shrouds: the lower rigging fans from each mast to the rails.
-        if (detail > 0.05f)
-            foreach (var mp in plan.Masts)
+        // Standing rigging: shrouds fanning from each lower masthead down to the rails (ratlines across them when
+        // she is big on screen), and a stay from each masthead forward to the foot of the mast before it.
+        if (detail > 0.02f)
+        {
+            var rope = Ink.Black with { A = 0.5f * detail };
+            float line = 0.8f * px;
+            int shrouds = Math.Clamp((int)(B / px / 16f) + 2, 2, 5);
+            Span<Vector2> feet = stackalloc Vector2[5];
+            for (int i = 0; i < plan.Masts.Length; i++)
             {
+                var mp = plan.Masts[i];
                 float mx = mp.X * L;
                 if (mx < cut) continue;
                 var head = new Vector2(mx, lean * 0.5f);
                 for (int s = -1; s <= 1; s += 2)
-                    for (int q = 0; q < 3; q++)
+                {
+                    for (int q = 0; q < shrouds; q++)
                     {
-                        var foot = new Vector2(mx - L * 0.02f - q * B * 0.07f, s * B * 0.47f);
-                        m.Line(head, foot, 0.8f * px, Ink.Black with { A = 0.32f * detail });
+                        float fx = mx + B * 0.04f - q * B * 0.085f * mp.Size;
+                        feet[q] = new Vector2(fx, s * B * 0.43f * HalfWidth(Mathf.Clamp(fx / L + 0.5f, 0, 1)));
+                        m.Line(head, feet[q], line, rope);
                     }
+                    if (detail > 0.5f)
+                    {
+                        var rat = rope with { A = rope.A * 0.75f * Mathf.Clamp((detail - 0.5f) / 0.4f, 0, 1) };
+                        for (int r = 1; r <= 5; r++)
+                        {
+                            float f = r / 7f;
+                            m.Line(feet[0].Lerp(head, f), feet[shrouds - 1].Lerp(head, f), 0.7f * px, rat);
+                        }
+                    }
+                }
+                if (i > 0)
+                {
+                    float fore0 = plan.Masts[i - 1].X * L;
+                    m.Line(new Vector2(mx - (mp.Kind == 'S' ? B * 0.1f : 0), lean), new Vector2(fore0 + B * 0.06f, lean * 0.3f), line, rope with { A = 0.62f * detail });
+                }
             }
+        }
 
         // Headsails on their stays, from the bowsprit to the foremast.
         var fore = plan.Masts[0];
@@ -213,18 +245,28 @@ public partial class ShipView
         // Tiers bottom-up: course (in over the second step), topsail (first step), topgallant (last step).
         Span<float> set = stackalloc float[3] { Ramp(frac, L1, L2), Ramp(frac, 0.02f, L1), Ramp(frac, L2, 1f) };
         Span<float> scale = stackalloc float[3] { 1f, 0.8f, 0.6f };
+        // The upper yards stand a little abaft the one below, square to the yards, so the canvas nests as a stack
+        // of bellies (shifting them straight aft fanned the braced yards out like blades).
+        float br = Mathf.DegToRad(braceDeg);
+        var aft = -new Vector2(Mathf.Cos(br), -Mathf.Sin(br));
         for (int t = 0; t < 3; t++)
         {
             float W = course * scale[t];
             float h = t / 2f;                                   // height up the mast, 0..1
-            var yc = new Vector2(mx - B * 0.11f * t, lean * (0.45f + 0.55f * h));
-            SquareSail(m, yc, W, set[t], t, ink, Mathf.Max(1.2f * px, B * 0.03f) * (1f - 0.15f * t), detail, px);
+            var yc = new Vector2(mx, lean * (0.45f + 0.55f * h)) + aft * (B * 0.075f * t);
+            // Braces lead from the lower yardarms aft to the rails; each upper sail shades the one below it.
+            float hullL = (float)ship.Hull.Length * Ink.PxPerM;
+            float bx = Mathf.Max(mx - hullL * 0.17f, -hullL * 0.46f);
+            float by = B * 0.43f * HalfWidth(Mathf.Clamp(bx / hullL + 0.5f, 0, 1));   // the rail, inside her topsides band
+            bool lowest = set[t] > 0.03f && (t == 0 || set[0] <= 0.03f) && (t <= 1 || set[1] <= 0.03f);
+            SquareSail(m, yc, W, set[t], t, ink, Mathf.Max(1.2f * px, B * 0.03f) * (1f - 0.15f * t), detail, px,
+                t < 2 && detail > 0.3f ? new Vector2(bx, by) : null, t > 0 ? B * 0.1f : 0f, lowest);
             if (t == 0) MastTop(m, new Vector2(mx, lean * 0.5f), B * 0.3f * size, px);
         }
-        MastCap(m, new Vector2(mx - B * 0.14f, lean), B * 0.045f * size, true, px);
+        MastCap(m, new Vector2(mx, lean) + aft * (B * 0.15f), B * 0.045f * size, true, px);
     }
 
-    void SquareSail(InkBatch m, Vector2 yc, float W, float set, int tier, float ink, float sparW, float detail, float px)
+    void SquareSail(InkBatch m, Vector2 yc, float W, float set, int tier, float ink, float sparW, float detail, float px, Vector2? brace, float dropShadow, bool casts)
     {
         float br = Mathf.DegToRad(braceDeg);
         var d = new Vector2(Mathf.Sin(br), Mathf.Cos(br));       // yard: port arm → starboard arm
@@ -239,10 +281,16 @@ public partial class ShipView
             int windSide = braceDeg >= 0 ? 1 : -1;
             float peak = 0.5f - 0.07f * windSide * Mathf.Clamp(Mathf.Abs(braceDeg) / 30f, 0, 1);
             int panels = Math.Clamp((int)(W / (px * 7f)), 3, 9);
-            SailBand(m, a, b, dir, Mathf.Max(depth, px * 3.2f * set * Mathf.Abs(f)), peak, panels, ink, detail, tier == 0, set);
+            SailBand(m, a, b, dir, Mathf.Max(depth, px * 3.2f * set * Mathf.Abs(f)), peak, panels, ink, detail, tier == 0, set, 0.55f, dropShadow, casts, tier == 0 || casts ? 0.92f : 0.62f);
         }
-        // The yard, with whatever canvas is still furled on it.
-        m.Taper(a, b, sparW, sparW, Spar, Spar);
+        if (brace is { } lead)
+        {
+            var rope = Ink.Black with { A = 0.42f * Mathf.Clamp((detail - 0.3f) / 0.3f, 0, 1) };
+            m.Line(a, lead with { Y = -lead.Y }, 0.75f * px, rope);
+            m.Line(b, lead, 0.75f * px, rope);
+        }
+        // The yard, reaching a little past the canvas, with whatever is still furled on it.
+        SparLine(m, a - d * W * 0.035f, b + d * W * 0.035f, sparW, sparW);
         if (set < 0.97f) Furl(m, a, b, sparW * (1.9f - 1.3f * set), px, 1 - set);
     }
 
@@ -269,7 +317,7 @@ public partial class ShipView
         var belly = new Vector2(Mathf.Sin(th), s * Mathf.Cos(th));
         var clew = mast + boomDir * boomLen;
         // Boom first (lowest), then the canvas, then the gaff over it.
-        m.Taper(mast, clew + boomDir * boomLen * 0.04f, sparW * 1.05f, sparW * 0.75f, Spar, Spar);
+        SparLine(m, mast, clew + boomDir * boomLen * 0.04f, sparW * 1.05f, sparW * 0.75f);
         float depth = 0;
         if (set > 0.03f)
         {
@@ -277,16 +325,16 @@ public partial class ShipView
             depth = boomLen * 0.46f * WindFill() * Exag() * set * size * Mathf.Abs(f) * Pulse();
             var dir = f >= 0 ? belly : -belly;
             int panels = Math.Clamp((int)(boomLen / (px * 7f)), 3, 8);
-            SailBand(m, mast, clew, dir, Mathf.Max(depth, px * 4f * set * Mathf.Abs(f)), 0.42f, panels, ink, detail, true, set);
+            SailBand(m, mast, clew, dir, Mathf.Max(depth, px * 4f * set * Mathf.Abs(f)), 0.42f, panels, ink, detail, true, set, 0.72f);
             if (topsail && topSet > 0.03f)
             {
                 var peakEnd = mast + boomDir * boomLen * 0.62f + dir * depth * 0.75f;
                 float td = boomLen * 0.62f * 0.3f * topSet * WindFill() * Mathf.Abs(f);
-                SailBand(m, mast + dir * depth * 0.1f, peakEnd, dir, Mathf.Max(td, px * 0.5f), 0.4f, 3, ink, detail, false, topSet);
+                SailBand(m, mast + dir * depth * 0.1f, peakEnd, dir, Mathf.Max(td, px * 0.5f), 0.4f, 3, ink, detail, false, topSet, 0.9f, sparW * 2.5f);
             }
             // The gaff: from the throat to the peak, which sags off to leeward over the leech.
             var peak = mast + boomDir * boomLen * 0.66f + dir * depth * 0.62f;
-            m.Taper(mast, peak, sparW * 0.95f, sparW * 0.65f, Spar, Spar);
+            SparLine(m, mast, peak, sparW * 0.95f, sparW * 0.65f);
         }
         float reef = set < 0.03f ? 1f : 1f - size * Mathf.Min(1, set * 1.5f);
         if (reef > 0.04f) Furl(m, mast + boomDir * boomLen * 0.04f, clew, sparW * (1f + 1.1f * reef), px, reef);
@@ -305,9 +353,9 @@ public partial class ShipView
             float f = fill + luff * 0.3f * Mathf.Sin(time * 18f + mast.X * 0.05f);
             float depth = yardLen * 0.36f * WindFill() * Exag() * set * Mathf.Abs(f) * Pulse();
             int panels = Math.Clamp((int)(yardLen / (px * 7f)), 3, 8);
-            SailBand(m, tack, peak, f >= 0 ? belly : -belly, Mathf.Max(depth, px * 4f * set * Mathf.Abs(f)), 0.55f, panels, ink, detail, true, set);
+            SailBand(m, tack, peak, f >= 0 ? belly : -belly, Mathf.Max(depth, px * 4f * set * Mathf.Abs(f)), 0.55f, panels, ink, detail, true, set, 0.72f);
         }
-        m.Taper(tack, peak, sparW * 1.1f, sparW * 0.55f, Spar, Spar);
+        SparLine(m, tack, peak, sparW * 1.1f, sparW * 0.55f);
         if (set < 0.97f) Furl(m, tack + dir * yardLen * 0.05f, peak - dir * yardLen * 0.05f, sparW * (1.8f - 1.2f * set), px, 1 - set);
     }
 
@@ -326,16 +374,20 @@ public partial class ShipView
         var normal = new Vector2(-d.Y, d.X);
         if (normal.Y * lee < 0) normal = -normal;
         if (f < 0) normal = -normal;
-        SailBand(m, tack, head, normal, Mathf.Max(depth, px * 2.5f * set * Mathf.Abs(f)), 0.62f, 3, ink, detail, false, set);
+        SailBand(m, tack, head, normal, Mathf.Max(depth, px * 2.5f * set * Mathf.Abs(f)), 0.62f, 3, ink, detail, false, set, 0.9f);
     }
 
     void Spritsail(InkBatch m, Vector2 yc, float W, float set, float ink, float detail, float lean)
     {
-        var a = yc + new Vector2(0, -W * 0.5f);
-        var b = yc + new Vector2(0, W * 0.5f);
+        // Under the bowsprit, braced round with the other yards.
+        float br = Mathf.DegToRad(braceDeg * 0.7f);
+        var d = new Vector2(Mathf.Sin(br), Mathf.Cos(br));
+        var fwd = new Vector2(Mathf.Cos(br), -Mathf.Sin(br));
+        var a = yc - d * W * 0.5f;
+        var b = yc + d * W * 0.5f;
         if (set > 0.03f)
-            SailBand(m, a, b, new Vector2(1, 0), Mathf.Max(W * 0.3f * set * Mathf.Abs(fill) * WindFill(), m.Px * 3f * set), 0.5f, 4, ink, detail, false, set);
-        m.Taper(a, b, ink * 1.2f, ink * 1.2f, Spar, Spar);
+            SailBand(m, a, b, fill >= 0 ? fwd : -fwd, Mathf.Max(W * 0.2f * set * Mathf.Abs(fill) * WindFill(), m.Px * 3f * set), 0.5f, 4, ink, detail, false, set, 0.7f);
+        SparLine(m, a, b, ink * 1.2f, ink * 1.2f);
         if (set < 0.97f) Furl(m, a, b, ink * 1.8f, m.Px, 1 - set);
     }
 
@@ -343,47 +395,64 @@ public partial class ShipView
 
     /// <summary>
     /// One sail seen from above: a band from the spar (a→b) bulging along <paramref name="dir"/> to a
-    /// belly edge, washed in watercolour that pools at the edge, cloths seamed, outlined in ink.
+    /// belly edge. The canvas is shaded under its spar, lit across the middle as it faces the sun, washed in
+    /// watercolour that pools at the edge, seamed, and outlined in ink that swells at the belly and fines away
+    /// at the yardarms. <paramref name="blunt"/> rounds the ends (square canvas) or keeps them sharp (headsails).
+    /// A sail <paramref name="casts"/> its shadow on the sea (one per mast of square canvas: the stack's shadows would
+    /// pile up); <paramref name="dropShadow"/> also shades the canvas beneath it.
     /// </summary>
-    void SailBand(InkBatch m, Vector2 a, Vector2 b, Vector2 dir, float depth, float peak, int panels, float ink, float detail, bool reefBand, float set)
+    void SailBand(InkBatch m, Vector2 a, Vector2 b, Vector2 dir, float depth, float peak, int panels, float ink, float detail, bool reefBand, float set, float blunt = 0.85f, float dropShadow = 0f, bool casts = true, float inkA = 0.92f)
     {
         int n = panels + 1;
-        Span<Vector2> p = stackalloc Vector2[n * 3];
-        Span<Color> c = stackalloc Color[n * 3];
+        const int R = 4;
+        Span<Vector2> p = stackalloc Vector2[n * R];
+        Span<Color> c = stackalloc Color[n * R];
+        Span<float> row = stackalloc float[R] { 0f, 0.42f, 0.8f, 1f };
         var cloth = sailColor;
         if (ship.TornSails) cloth = cloth.Darkened(0.08f);
-        var shade = cloth.Darkened(0.12f);
-        var pool = cloth.Lerp(new Color(0.62f, 0.55f, 0.45f), 0.42f) with { A = 1 };
-        var lit = cloth.Lightened(0.06f);
+        // From above we see the canvas between the spar and the belly: it faces the sun when the belly turns from it.
+        float lit = Mathf.Clamp(dir.Dot(shadowLocal), -1, 1) * Mathf.Clamp(Sunlight, 0, 1);
+        var under = cloth.Darkened(0.17f - 0.05f * lit);
+        var face = lit >= 0 ? cloth.Lightened(0.04f + 0.08f * lit) : cloth.Darkened(-0.07f * lit);
+        var turn = face.Lerp(cloth.Darkened(0.06f), 0.5f);
+        var pool = cloth.Lerp(new Color(0.60f, 0.53f, 0.43f), 0.4f - 0.1f * lit) with { A = 1 };
         float slack = 1 - set;
         for (int i = 0; i < n; i++)
         {
             float u = i / (float)(n - 1);
             float sh = u < peak ? Mathf.Sin(Mathf.Pi * 0.5f * u / peak) : Mathf.Sin(Mathf.Pi * 0.5f * (1 - u) / (1 - peak));
-            sh = Mathf.Pow(Mathf.Max(sh, 0), 0.85f);
+            sh = Mathf.Pow(Mathf.Max(sh, 0), blunt);
             var baseP = a.Lerp(b, u);
             var off = dir * depth * sh;
-            p[i] = baseP;
-            p[n + i] = baseP + off * 0.5f;
-            p[2 * n + i] = baseP + off;
-            c[i] = shade;
-            c[n + i] = lit.Lerp(shade, slack * 0.5f);
-            c[2 * n + i] = pool;
+            for (int r = 0; r < R; r++) p[r * n + i] = baseP + off * row[r];
+            c[i] = under;
+            c[n + i] = face.Lerp(under, slack * 0.5f);
+            c[2 * n + i] = turn;
+            c[3 * n + i] = pool;
         }
-        m.Grid(p, c, 3, n);
+        if (casts) cast.GridFlat(p, R, n, Colors.White);
+        if (dropShadow > 0 && Sunlight > 0.01f)
+        {
+            Span<Vector2> q = stackalloc Vector2[n * R];
+            var shift = shadowLocal * dropShadow;
+            for (int k = 0; k < q.Length; k++) q[k] = p[k] + shift;
+            m.GridFlat(q, R, n, ShadowInk with { A = 0.13f * Sunlight });
+        }
+        m.Grid(p, c, R, n);
+        int last = (R - 1) * n;
         if (striped)
             for (int i = 0; i < n - 1; i += 2)
-                m.Quad(p[i], p[i + 1], p[2 * n + i + 1], p[2 * n + i], Ink.Red with { A = 0.62f });
+                m.Quad(p[i], p[i + 1], p[last + i + 1], p[last + i], Ink.Red with { A = 0.62f });
         // Seams run from the spar to the belly; a reef band just below the spar on the big sails.
         if (detail > 0.02f)
         {
-            var seam = Ink.Black with { A = 0.2f * detail };
+            var seam = Ink.Black with { A = 0.18f * detail };
             for (int i = 1; i < n - 1; i++)
-                m.Line(p[i], p[2 * n + i], 0.8f * m.Px, seam);
+                m.Line(p[i], p[last + i], 0.75f * m.Px, seam);
             if (reefBand && depth > m.Px * 8)
             {
                 Span<Vector2> reefLine = stackalloc Vector2[n];
-                for (int i = 0; i < n; i++) reefLine[i] = p[i].Lerp(p[2 * n + i], 0.28f);
+                for (int i = 0; i < n; i++) reefLine[i] = p[i].Lerp(p[last + i], 0.26f);
                 m.Polyline(reefLine, 0.8f * m.Px, Ink.Black with { A = 0.22f * detail });
             }
         }
@@ -391,12 +460,34 @@ public partial class ShipView
             for (int k = 0; k < 2; k++)
             {
                 int i = 1 + (int)(Ink.Jitter(ship.Id, k, (int)(a.X * 3)) * (n - 2));
-                var q0 = p[i].Lerp(p[2 * n + i], 0.35f);
-                var q1 = p[Math.Min(i + 1, n - 1)].Lerp(p[2 * n + Math.Min(i + 1, n - 1)], 0.7f);
+                var q0 = p[i].Lerp(p[last + i], 0.35f);
+                var q1 = p[Math.Min(i + 1, n - 1)].Lerp(p[last + Math.Min(i + 1, n - 1)], 0.7f);
                 m.Line(q0, q1, Mathf.Max(1.4f * m.Px, depth * 0.08f), Ink.Black with { A = 0.75f });
             }
-        // The belly edge carries the weight of the ink; the head is under the spar.
-        m.Polyline(p.Slice(2 * n, n), ink, Ink.Black);
+        // The belly edge carries the weight of the ink, swelling at the belly and fining at the ends; the head is under the spar.
+        var edge = p.Slice(last, n);
+        int mid = n / 2;
+        var inkC = Ink.Black with { A = inkA };
+        m.PolylineWidths(edge[..(mid + 1)], ink * 0.45f, ink, inkC, inkC);
+        m.PolylineWidths(edge[mid..], ink, ink * 0.45f, inkC, inkC);
+    }
+
+    static readonly Color SparLit = new(0.56f, 0.43f, 0.29f);
+
+    /// <summary>A spar: dark wood rounded by a lit line on its sun side, and its shadow on the sea.</summary>
+    void SparLine(InkBatch m, Vector2 a, Vector2 b, float w0, float w1)
+    {
+        m.Taper(a, b, w0, w1, Spar, Spar);
+        cast.Taper(a, b, w0, w1, Colors.White, Colors.White);
+        float w = Mathf.Max(w0, w1);
+        if (w < 3f * m.Px) return;
+        var d = b - a;
+        float len = d.Length();
+        if (len < 1e-3f) return;
+        var nrm = new Vector2(-d.Y, d.X) / len;
+        if (nrm.Dot(shadowLocal) > 0) nrm = -nrm;
+        var lit = SparLit with { A = 0.85f * Mathf.Clamp((w / m.Px - 3f) / 3f, 0, 1) };
+        m.Taper(a + nrm * w0 * 0.18f, b + nrm * w1 * 0.18f, w0 * 0.3f, w1 * 0.3f, lit, lit);
     }
 
     /// <summary>Canvas furled along a spar: a soft roll with gasket ties.</summary>
@@ -409,6 +500,7 @@ public partial class ShipView
         var t = d / len;
         var roll = sailColor.Darkened(0.06f);
         m.Taper(a + t * len * 0.04f, b - t * len * 0.04f, w, w, roll, roll);
+        cast.Taper(a + t * len * 0.04f, b - t * len * 0.04f, w, w, Colors.White, Colors.White);
         var nrm = new Vector2(-t.Y, t.X);
         float half = w * 0.5f;
         m.Line(a + t * len * 0.04f + nrm * half, b - t * len * 0.04f + nrm * half, 0.8f * px, Ink.Black with { A = 0.55f });

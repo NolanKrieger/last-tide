@@ -562,16 +562,28 @@ public partial class Hud : CanvasLayer
     /// <summary>The areas edge markers must keep clear of.</summary>
     internal IReadOnlyList<Rect2> KeepOut => canvas.KeepOut;
 
+    /// <summary>The hint note on screen now, if any (Main sets it each frame); edge markers step out from under it.</summary>
+    internal Rect2? HintCard;
+
     internal static NoticeKind KindOf(string key)
     {
+        int bar = key.IndexOf('|');
+        if (bar >= 0) key = key[..bar];
         if (key.StartsWith("NOTICE_COSMETIC_") || key.StartsWith("ACHIEVEMENT_")) return NoticeKind.Good;
         return key switch
         {
             "NOTICE_COVE" or "NOTICE_BY_A_HAIR" or "NOTICE_MONSTER_BEATEN" or "NOTICE_MONSTER_ESCAPED" or "NOTICE_MAP_MATCHED"
-                or "NOTICE_TREASURE" or "NOTICE_SALVAGE" => NoticeKind.Good,
-            "NOTICE_BOTTLE_MAP" or "NOTICE_DIG_INTERRUPTED" or "NOTICE_FURL_FIRST" => NoticeKind.Info,
+                or "NOTICE_TREASURE" or "NOTICE_SALVAGE" or "NOTICE_BOUNTY" => NoticeKind.Good,
+            "NOTICE_BOTTLE_MAP" or "NOTICE_DIG_INTERRUPTED" or "NOTICE_FURL_FIRST" or "NOTICE_SEARCH_CLEAR" or "NOTICE_NO_CARTOGRAPHER" => NoticeKind.Info,
             _ => NoticeKind.Danger,
         };
+    }
+
+    /// <summary>A notice's line: a plain key, or "KEY|arg|arg" from the sim with the values to put in it.</summary>
+    internal static string NoticeLine(string notice)
+    {
+        var parts = notice.Split('|');
+        return parts.Length == 1 ? Text.Get(notice) : Text.Get(parts[0], parts[1..].Cast<object>().ToArray());
     }
 
     /// <param name="delta">Seconds since the last frame: every HUD timer and animation runs on it.</param>
@@ -610,17 +622,19 @@ public partial class Hud : CanvasLayer
 
         // Conditions: where she is, the weather, and anything that has hold of her (danger in red).
         var cond = world.ConditionsAt(ship.Pos);
-        var region = world.Map.RegionAt(ship.Pos).Type;
+        // Past the chart's edge there is no region, only uncharted water (a stand-in value so the names below switch).
+        var region = Map.BeyondEdge(ship.Pos) > 0 ? (RegionType)(-1) : world.Map.RegionAt(ship.Pos).Type;
         var beast = world.Monster;
         long sig = (cond.Storm > 0.05 ? 1L : 0) + (cond.Fog > 0.05 ? 2L : 0) + (cond.Doldrums > 0.3 ? 4L : 0) + (cond.Ash > 0.05 ? 8L : 0)
             + (cond.Night ? 16L : 0) + (world.Lantern ? 32L : 0) + (ship.TornSails ? 64L : 0) + (world.Pinned ? 128L : 0)
             + (world.RudderJam > 0 ? 256L : 0) + (world.SirenPull != 0 ? 512L : 0) + (ship.Aground ? 1024L : 0)
-            + (world.MangroveBlocked ? 2048L : 0) + (beast == null ? 0L : (int)beast.Type + 1L) * 4096 + (long)region * 1_048_576;
+            + (world.MangroveBlocked ? 2048L : 0) + (beast == null ? 0L : (int)beast.Type + 1L) * 4096 + ((long)region + 1) * 1_048_576
+            + (world.InWhirlpool != null ? 1L << 40 : 0);
         if (sig != kCond)
         {
             kCond = sig;
             Conditions.Clear();
-            Conditions.Add((Text.Get("REGION_" + RegionDef.Of(region).Key), Parchment.Muted));
+            Conditions.Add((((int)region < 0 ? Text.Get("REGION_beyond") : Text.Get("REGION_" + RegionDef.Of(region).Key)), Parchment.Muted));
             if (cond.Storm > 0.05) Conditions.Add((Text.Get("WX_STORM"), Ink.Red));
             if (cond.Fog > 0.05) Conditions.Add((Text.Get("WX_FOG"), Ink.Wind));
             if (cond.Doldrums > 0.3) Conditions.Add((Text.Get("WX_DOLDRUMS"), Ink.Wind));
@@ -632,6 +646,7 @@ public partial class Hud : CanvasLayer
             if (world.RudderJam > 0) Conditions.Add((Text.Get("WX_JAMMED"), Ink.Red));
             if (world.SirenPull != 0) Conditions.Add((Text.Get("WX_SONG"), Ink.Red));
             if (ship.Aground) Conditions.Add((Text.Get("HUD_AGROUND"), Ink.Red));
+            if (world.InWhirlpool != null) Conditions.Add((Text.Get("WX_WHIRLPOOL"), Ink.Red));
             var sb = new System.Text.StringBuilder();
             foreach (var (text, _) in Conditions) { if (sb.Length > 0) sb.Append(" · "); sb.Append(text); }
             WeatherText = sb.ToString();
@@ -655,7 +670,7 @@ public partial class Hud : CanvasLayer
         {
             if (lastRegion != null)
             {
-                RegionName = Text.Get("REGION_" + RegionDef.Of(region).Key);
+                RegionName = ((int)region < 0 ? Text.Get("REGION_beyond") : Text.Get("REGION_" + RegionDef.Of(region).Key));
                 RegionFlash = 1;
             }
             lastRegion = region;
@@ -772,7 +787,7 @@ public partial class Hud : CanvasLayer
             if (world.Notices.Count > 0 && (NoticeText.Length == 0 || NoticeLeft < NoticeHold - 1.8f))
             {
                 string key = world.Notices.Dequeue();
-                NoticeText = Text.Get(key);
+                NoticeText = NoticeLine(key);
                 NoticeKindNow = KindOf(key);
                 NoticeLeft = NoticeHold;
                 NoticeAge = 0;
@@ -925,7 +940,9 @@ public partial class HudCanvas : InkCanvas
 
     void BuildLegend()
     {
-        string sig = Hud.KeyLine;
+        // With no cartographer aboard the chart key only says why it stays shut (Nolan, 2026-09-27).
+        bool noChart = Hud.World is { } lw && !lw.HasCartographer;
+        string sig = Hud.KeyLine + (noChart ? "|no-cartographer" : "");
         if (sig == legendBuiltFor && legendItems.Count > 0) return;
         legendBuiltFor = sig;
         legendItems.Clear();
@@ -938,7 +955,7 @@ public partial class HudCanvas : InkCanvas
                 "HUD_LEGEND_ORDERS" => new[] { Hud.Key(a1) + "–" + Hud.Key(a2) },
                 _ => a2.Length > 0 ? new[] { Hud.Key(a1), Hud.Key(a2) } : new[] { Hud.Key(a1) },
             };
-            legendItems.Add((keys, Text.Get(word)));
+            legendItems.Add((keys, Text.Get(noChart && word == "HUD_LEGEND_CHART" ? "HUD_LEGEND_CHART_NONE" : word)));
         }
     }
 
@@ -1238,6 +1255,9 @@ public partial class HudCanvas : InkCanvas
         var tierInk = HudInk.Tier(Hud.Tier).Darkened(0.35f);
         if (Hud.TierFlash > 0) tierInk = tierInk.Lerp(Ink.Red, Hud.TierFlash);
         float tnw = TextW(Fonts.SmallCaps, 17, Hud.TierName);
+        // Captioned, because the tiers are named like weather ("Flat Calm" in a 20-knot breeze read as a forecast).
+        string cap = Text.Get("HUD_THREAT");
+        Txt(Fonts.Italic, 14, new Vector2(right - TextW(Fonts.Italic, 14, cap), p.Y + 25), cap, Parchment.Muted);
         var tierPivot = new Vector2(right - tnw / 2, p.Y + 38);
         if (Hud.ThreatPulse > 0) SetBase(ScaleAbout(tierPivot, 1 + 0.35f * Ease(Hud.ThreatPulse)));
         Txt(Fonts.SmallCaps, 17, new Vector2(right - tnw, p.Y + 43), Hud.TierName, tierInk);
@@ -1384,8 +1404,8 @@ public partial class HudCanvas : InkCanvas
         // Hull and water: two drawn tubes. Hull drains from the top, water rises from the bottom; both go red
         // when she is in danger, and the frame beats while she is.
         bool hullBad = Hud.HullFrac < 0.3f, waterBad = Hud.WaterFrac > 0.7f;
-        Tube(hullTube, Hud.HullFrac, hullBad ? Ink.Red : HudInk.HullWood, hullBad, null);
-        Tube(waterTube, Hud.WaterFrac, waterBad ? Ink.Red : HudInk.Water, waterBad, Hud.StandWaterOnly && Hud.Stand ? 0.8f : null);
+        Tube(hullTube, Hud.HullFrac, hullBad ? Ink.Red : HudInk.HullWood, hullBad, (float)Ship.FloodLine);   // below the line she floods
+        Tube(waterTube, Hud.WaterFrac, waterBad ? Ink.Red : HudInk.Water, waterBad, Hud.StandWaterOnly && Hud.Stand ? 0.8f : null);   // drain below it to end the stand
         TxtC(Fonts.SmallCaps, 15, hullTube.GetCenter().X, hullTube.End.Y + 17, Text.Get("HUD_GAUGE_HULL"), Ink.Black);
         TxtC(Fonts.SmallCaps, 15, waterTube.GetCenter().X, waterTube.End.Y + 17, Text.Get("HUD_GAUGE_WATER"), Ink.Black);
         TxtC(Fonts.Body, 15, hullTube.GetCenter().X, hullTube.Position.Y - 8, Hud.HullPct, hullBad ? Ink.Red : Ink.Black);
@@ -1429,7 +1449,7 @@ public partial class HudCanvas : InkCanvas
     }
 
     static readonly string[] Plus = Enumerable.Range(0, 100).Select(i => i.ToString(CultureInfo.InvariantCulture)).ToArray();
-    static readonly string[] StationIcons = { "cannon", "sail", "repair", "pump" };
+    static readonly string[] StationIcons = { "cannon", "sail", "repair", "sailor" };
     static readonly float[] SailHeights = { 0f, 0.36f, 0.68f, 1f };
 
     void Tube(Rect2 r, float frac, Color fill, bool danger, float? mark)
@@ -1442,7 +1462,7 @@ public partial class HudCanvas : InkCanvas
             Box(new Rect2(r.Position.X, r.Position.Y + r.Size.Y * i / 4, 5, 1.2f), Ink.Black);
         if (mark is { } m)
         {
-            // The line to pump her below: paper-edged so it reads over any fill, with a pointer at its end.
+            // A line to cross (the flood line, or the water to drain below): paper-edged so it reads over any fill, with a pointer at its end.
             float my = r.End.Y - r.Size.Y * m;
             Box(new Rect2(r.Position.X - 3, my - 2, r.Size.X + 6, 4), Ink.Paper);
             Box(new Rect2(r.Position.X - 3, my - 1, r.Size.X + 6, 2), Ink.Black);
@@ -1671,10 +1691,10 @@ public partial class HudCanvas : InkCanvas
         Txt(Fonts.Body, 16, new Vector2(hx, r.Position.Y + 102), Hud.HarbourLine, harbourInk);
         if (Hud.StandWaterOnly)
         {
-            // Pumping is the other way out: the order that sends every spare hand to the pumps.
+            // Patching is the other way out: carpenters first, the hull back over the flood line, and she drains.
             float kx = x;
             kx += KeyCap(new Vector2(kx, r.Position.Y + 114), Hud.Key("Order3")) + 8;
-            Txt(Fonts.Body, 16, new Vector2(kx, r.Position.Y + 130), Text.Get("HUD_STAND_PUMP"), Ink.Black);
+            Txt(Fonts.Body, 16, new Vector2(kx, r.Position.Y + 130), Text.Get("HUD_STAND_PATCH"), Ink.Black);
         }
     }
 
@@ -1762,6 +1782,7 @@ public partial class EdgeMarkers : InkCanvas
 
     readonly List<Target> targets = new();
     readonly List<Rect2> labelRects = new();
+    readonly List<Rect2> keepWithHint = new();
     readonly List<Rect2> badgeRects = new();
     readonly Dictionary<(string, int, long, bool), string> labelCache = new();
     readonly List<Marker> placed = new();
@@ -1824,8 +1845,15 @@ public partial class EdgeMarkers : InkCanvas
         }
         if (targets.Count == 0) return;
 
-        // Along the bearing to the rim, then out of the plates' way.
-        var keep = Hud.KeepOut;
+        // Along the bearing to the rim, then out of the plates' way (and out from under a hint note being read).
+        IReadOnlyList<Rect2> keep = Hud.KeepOut;
+        if (Hud.HintCard is { } card)
+        {
+            keepWithHint.Clear();
+            keepWithHint.AddRange(keep);
+            keepWithHint.Add(card);
+            keep = keepWithHint;
+        }
         for (int i = 0; i < targets.Count; i++)
         {
             var t = targets[i];

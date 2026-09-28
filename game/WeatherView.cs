@@ -94,6 +94,7 @@ public partial class WeatherView : Node2D
         wash.SetShaderParameter("view_world", viewMetres);
         wash.SetShaderParameter("screen_px", window);
         wash.SetShaderParameter("night", night);
+        ShipView.Sunlight = (1 - night) * (1 - 0.8f * Mathf.Clamp((float)c.Fog, 0, 1)) * (1 - 0.5f * Mathf.Clamp((float)c.Rain, 0, 1));
         wash.SetShaderParameter("dusk", c.Night || tw >= 0.8f || backdrop ? 0f : Mathf.Sin(tw / 0.8f * Mathf.Pi));
         wash.SetShaderParameter("dawn", world.HourOfDay < 12 ? 1f : 0f);
         wash.SetShaderParameter("pool_centre", shipScreenPx * scale);

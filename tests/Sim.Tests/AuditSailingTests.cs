@@ -264,6 +264,7 @@ public class AuditSailingTests
         w.DirectorEnabled = false;
         w.MonstersEnabled = false;
         w.Islands.Clear();
+        w.Player.Officers.Add(new Officer { Type = OfficerType.Cartographer, Tier = 0 });   // he marks what the glass finds
         var cove = w.Map.Ports.First(p => p.Secret && !p.Discovered);
         var dir = Vec2.FromAngle(0.7);
         w.Ship.Pos = cove.Harbor - dir * 780;   // beyond plain sight, inside the glass
@@ -519,11 +520,33 @@ public class AuditSailingTests
     {
         // The glass inks the chart and spots ports (which changes what a tavern rumour can point at), so a replay
         // must see it: it used to be set on the world beside the input, and replays sailed blind.
-        var a = World.NewRun(5);
+        // A home harbour within the glass's reach of uncharted water: the Trade Isles start charted, so on the 18 km
+        // chart many homes lie too deep inside them. Take the first seed whose home is near their edge.
+        World a = null!;
+        double dir = double.NaN;
+        for (int seed = 4; seed < 60 && double.IsNaN(dir); seed++)
+        {
+            a = World.NewRun(seed);
+            // Only a cartographer keeps the chart (Nolan, 2026-09-27): sign one on at home first, through the logged
+            // commands (signing on inks the water round the harbour, so look only after).
+            Assert.Equal(PortResult.Ok, a.Apply(new PortCommand(PortAction.Dock)));
+            var keeper = a.TavernOfficers(a.Docked!).First(o => o.Type == OfficerType.Cartographer);
+            Assert.Equal(PortResult.Ok, a.Apply(new PortCommand(PortAction.HireOfficer, Amount: (int)OfficerType.Cartographer * 10 + keeper.Tier)));
+            Assert.Equal(PortResult.Ok, a.Apply(new PortCommand(PortAction.CastOff)));
+            // Look out of the inked home waters, toward the nearest uncharted water the glass can reach.
+            double nearest = double.MaxValue;
+            for (int k = 0; k < 72; k++)
+                for (double f = a.VisionRadius; f < a.SpyglassRange - 50; f += RevealMask.Cell)
+                {
+                    var p = a.Ship.Pos + Vec2.FromAngle(k * Angles.Tau / 72) * f;
+                    if (!Map.InBounds(p)) break;   // past the chart's edge nothing can be inked
+                    if (a.Reveal.IsRevealed(p)) continue;
+                    if (f < nearest) { nearest = f; dir = Math.Round(k * Angles.Tau / 72, 2); }
+                    break;
+                }
+        }
+        Assert.False(double.IsNaN(dir), "uncharted water within the glass's reach of home");
         int before = a.Reveal.RevealedCells;
-        // Look out of the pre-inked home waters, toward the nearest other region.
-        var other = a.Map.Regions.Where(g => g.Type != RegionType.TradeIsles).OrderBy(g => g.Seed.DistanceTo(a.Ship.Pos)).First();
-        double dir = Math.Round((other.Seed - a.Ship.Pos).Angle, 2);
         for (int t = 0; t < 600; t++)
             a.Tick(new ShipInput(0, 0, Spyglass: t < 400, SpyglassDir: t < 400 ? dir : 0));
         Assert.True(a.Reveal.RevealedCells > before, "the glass inked nothing new");
@@ -575,20 +598,17 @@ public class AuditSailingTests
     }
 
     [Fact]
-    public void AVoyageFromBeforeTheCoveRuleResumesOnItsOwnMap()
+    public void AVoyageFromAnOlderChartCannotResume()
     {
-        // Generator v3 re-rolls the maps whose only start route was a hidden cove (seed 7 among them). A suspend
-        // save from before carries no MapVersion: it must come back on the map it was sailing, not today's.
-        var old = World.NewRun(7, mapVersion: 2);
-        Assert.NotEqual(old.Map.Ports.Select(p => p.Harbor), MapGen.Generate(7).Ports.Select(p => p.Harbor));
-        var script = new Rng(4);
-        for (int t = 0; t < 600; t++) old.Tick(Scripted(script, t));
-        var node = System.Text.Json.Nodes.JsonNode.Parse(old.SaveJson())!.AsObject();
+        // Generator v6 (the 18 × 13.5 km landform chart) makes no older map: a suspend save that carries an earlier
+        // MapVersion, or none (a save from before versions were recorded), is refused rather than resumed on a
+        // different sea. The title then sets it aside (Main.ResumeVoyage).
+        var w = World.NewRun(7);
+        var node = System.Text.Json.Nodes.JsonNode.Parse(w.SaveJson())!.AsObject();
+        node["MapVersion"] = 5;
+        Assert.Throws<NotSupportedException>(() => World.LoadJson(node.ToJsonString()));
         Assert.True(node.Remove("MapVersion"));
-        var b = World.LoadJson(node.ToJsonString());
-        Assert.Equal(2, b.Map.Version);
-        Assert.Equal(old.Map.Ports.Select(p => p.Harbor), b.Map.Ports.Select(p => p.Harbor));
-        Assert.Equal(old.Hash(), b.Hash());
+        Assert.Throws<NotSupportedException>(() => World.LoadJson(node.ToJsonString()));
         // And a new save keeps the version it was made with.
         Assert.Equal(MapGen.Version, World.LoadJson(World.NewRun(7).SaveJson()).Map.Version);
     }
@@ -700,7 +720,7 @@ public class AuditSailingTests
     public void TheCrewPanelIsReplayed()
     {
         // R-13 (sim-combat): the crew panel wrote the order and the stations straight into the ship, logged nowhere, so a
-        // replay of a voyage that used it went on with the old hands (reloads, sail handling and pumping all differ).
+        // replay of a voyage that used it went on with the old hands (reloads, sail handling and repairs all differ).
         var a = World.NewRun(9);
         var script = new Rng(8);
         for (int t = 0; t < 900; t++)

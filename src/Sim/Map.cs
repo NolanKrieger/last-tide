@@ -57,7 +57,7 @@ public sealed class Wreck
 /// <summary>The archipelago for one run: regions, islands, ports, treasure, wrecks and the nav grid.</summary>
 public sealed class Map
 {
-    public const double Width = 6000, Height = 4500;
+    public const double Width = 18000, Height = 13500;
     public const double HalfW = Width / 2, HalfH = Height / 2;
 
     public int Seed;
@@ -68,6 +68,8 @@ public sealed class Map
     public List<Port> Ports = new();
     public List<TreasureSite> Treasures = new();
     public List<Wreck> Wrecks = new();
+    /// <summary>The Maelstrom Straits' whirlpools, in the narrows (the open sea beyond the chart has its own: <see cref="Sim.Whirlpools"/>).</summary>
+    public List<Whirlpool> Whirlpools = new();
     public NavGrid Nav = null!;
     public int StartPortId;
     public int Attempts;
@@ -76,20 +78,23 @@ public sealed class Map
 
     public static bool InBounds(Vec2 p) => p.X >= -HalfW && p.X <= HalfW && p.Y >= -HalfH && p.Y <= HalfH;
 
-    /// <summary>The gentle noise warp applied before the nearest-seed test, so borders are not straight lines.</summary>
+    /// <summary>How far beyond the chart's edge a point lies (m); negative inside it. The sea goes on out there.</summary>
+    public static double BeyondEdge(Vec2 p) => Math.Max(Math.Abs(p.X) - HalfW, Math.Abs(p.Y) - HalfH);
+
+    /// <summary>The noise warp applied before the nearest-seed test, so borders wander instead of running straight.</summary>
     Vec2 Warp(Vec2 p)
     {
-        double wx = Noise.Value3(Seed + 31, p.X / 900, p.Y / 900, 0.3) * 350;
-        double wy = Noise.Value3(Seed + 32, p.X / 900, p.Y / 900, 0.7) * 350;
+        double wx = Noise.Value3(Seed + 31, p.X / 2400, p.Y / 2400, 0.3) * 900 + Noise.Value3(Seed + 33, p.X / 800, p.Y / 800, 0.3) * 260;
+        double wy = Noise.Value3(Seed + 32, p.X / 2400, p.Y / 2400, 0.7) * 900 + Noise.Value3(Seed + 34, p.X / 800, p.Y / 800, 0.7) * 260;
         return new Vec2(p.X + wx, p.Y + wy);
     }
 
     /// <summary>
     /// Squared-distance margin over which the weather of two regions blends at their border. With region seeds
-    /// ~1.5–2 km apart, a neighbour's weight falls smoothly from ½ on the border to 0 about 100 m inside it — some
+    /// ~4.5 km apart, a neighbour's weight falls smoothly from ½ on the border to 0 about 100 m inside it — some
     /// 8 s at a sloop's best speed.
     /// </summary>
-    public const double BorderBlendSq = 2 * 1750 * 100;
+    public const double BorderBlendSq = 2 * 4500 * 100;
 
     /// <summary>
     /// How much of each region's weather is felt at a point (indexed like <see cref="Regions"/>, summing to 1).
@@ -141,15 +146,70 @@ public sealed class Map
 
     public bool OnLand(Vec2 p)
     {
-        foreach (var island in Islands)
+        foreach (var island in IslandsAround(p))
             if (p.DistanceTo(island.Centre) <= island.BoundRadius && island.Contains(p)) return true;
         return false;
     }
 
-    /// <summary>Islands whose bounding circle comes within <paramref name="margin"/> of a point.</summary>
+    /// <summary>Islands whose bounding circle comes within <paramref name="margin"/> of a point, in id order.</summary>
     public IEnumerable<Island> IslandsNear(Vec2 p, double margin)
     {
+        EnsureIndex();
+        int x0 = IndexX(p.X - margin), x1 = IndexX(p.X + margin), y0 = IndexY(p.Y - margin), y1 = IndexY(p.Y + margin);
+        if (x0 == x1 && y0 == y1)
+        {
+            foreach (var island in index![y0 * IndexW + x0] ?? NoIslands)
+                if (p.DistanceTo(island.Centre) <= island.BoundRadius + margin) yield return island;
+            yield break;
+        }
+        var found = new List<Island>();
+        stampNow++;
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+                foreach (var island in index![y * IndexW + x] ?? NoIslands)
+                {
+                    if (stamps[island.Id] == stampNow) continue;
+                    stamps[island.Id] = stampNow;
+                    if (p.DistanceTo(island.Centre) <= island.BoundRadius + margin) found.Add(island);
+                }
+        found.Sort((a, b) => a.Id.CompareTo(b.Id));
+        foreach (var island in found) yield return island;
+    }
+
+    /// <summary>
+    /// Every island that could come within <see cref="IndexPad"/> of a point: the few a ship there can touch, in id
+    /// order. With a thousand islands on the chart, the hull tests start here rather than with the whole list.
+    /// </summary>
+    public IReadOnlyList<Island> IslandsAround(Vec2 p)
+    {
+        EnsureIndex();
+        return index![IndexY(p.Y) * IndexW + IndexX(p.X)] ?? NoIslands;
+    }
+
+    // ---- Spatial index: islands by 500 m cell (bounding circle + pad), rebuilt whenever the list changes size ----
+    public const double IndexCell = 500, IndexPad = 120;
+    static readonly int IndexW = (int)Math.Ceiling(Width / IndexCell) + 2, IndexH = (int)Math.Ceiling(Height / IndexCell) + 2;
+    static readonly List<Island> NoIslands = new();
+    List<Island>?[]? index;
+    int indexedCount = -1, stampNow;
+    int[] stamps = Array.Empty<int>();
+
+    // Cells run from one cell beyond the chart's west/north edge; points further out share the border cells, which hold no islands.
+    static int IndexX(double x) => Math.Clamp((int)Math.Floor((x + HalfW) / IndexCell) + 1, 0, IndexW - 1);
+    static int IndexY(double y) => Math.Clamp((int)Math.Floor((y + HalfH) / IndexCell) + 1, 0, IndexH - 1);
+
+    void EnsureIndex()
+    {
+        if (index != null && indexedCount == Islands.Count) return;
+        index = new List<Island>?[IndexW * IndexH];
         foreach (var island in Islands)
-            if (p.DistanceTo(island.Centre) <= island.BoundRadius + margin) yield return island;
+        {
+            double r = island.BoundRadius + IndexPad;
+            for (int y = IndexY(island.Centre.Y - r); y <= IndexY(island.Centre.Y + r); y++)
+                for (int x = IndexX(island.Centre.X - r); x <= IndexX(island.Centre.X + r); x++)
+                    (index[y * IndexW + x] ??= new List<Island>()).Add(island);
+        }
+        stamps = new int[Islands.Count == 0 ? 0 : Islands.Max(i => i.Id) + 1];
+        indexedCount = Islands.Count;
     }
 }

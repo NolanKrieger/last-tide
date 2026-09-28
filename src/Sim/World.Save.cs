@@ -40,7 +40,6 @@ public sealed partial class World
         public bool Foundering { get; set; }
         public double Hourglass { get; set; }
         public bool WaterOnlyStand { get; set; }
-        public double StandBonus { get; set; }   // glass granted for pumping this stand (absent in older saves: 0)
         public int ShipsSunkStat { get; set; }
         public double PlayerCarpenterWork { get; set; }
         public double PlayerPatchWork { get; set; }
@@ -111,9 +110,14 @@ public sealed partial class World
         public bool DigWreck { get; set; }
         public double DigProgress { get; set; }
         public bool MonstersEnabled { get; set; } = true;
-        public int[] Parts { get; set; } = new int[9];
+        public int[] Parts { get; set; } = new int[8];
         public int[] CustomStations { get; set; } = new int[4];
         public List<int[]> Officers { get; set; } = new();
+        /// <summary>
+        /// Written true since the cartographer rule (Nolan, 2026-09-27). An older voyage was charting without one, so it
+        /// resumes with a green cartographer aboard rather than a chart it suddenly cannot open.
+        /// </summary>
+        public bool CartographerRule { get; set; }
         public List<string> HullsOwned { get; set; } = new();
         public double MarinesClock { get; set; }
         public List<string> Achievements { get; set; } = new();
@@ -135,10 +139,19 @@ public sealed partial class World
         public double SirenPull { get; set; }
         public int LastMonsterHit { get; set; }
         public double MonsterHitTime { get; set; } = -1;
+        public double WhirlpoolHitTime { get; set; } = -1;
+        public double WhirlpoolCoreClock { get; set; }
+        public double IceHitTime { get; set; } = -1;
         /// <summary>Per port, the prices remembered before its last visit (the market's trend arrows).</summary>
         public List<double?[]?> PricesLastVisit { get; set; } = new();
         /// <summary>The merchants' cached lanes: [from port, to port, x0, y0, x1, y1, …], in cache order.</summary>
         public List<double[]> Lanes { get; set; } = new();
+        /// <summary>The harbour office: contracts in hand, board slots signed, bounties owed, patrols that searched her.</summary>
+        public List<Contract> Contracts { get; set; } = new();
+        public List<long> TakenOffers { get; set; } = new();
+        public int BountyOwed { get; set; }
+        public int BountyShips { get; set; }
+        public List<int> SearchedBy { get; set; } = new();
         /// <summary>
         /// Older saves carried the whole input and command logs (MBs on a long voyage, rewritten on every dock); they
         /// are read past and no longer written: resuming needs the state, and a resumed voyage logs from its save.
@@ -186,7 +199,6 @@ public sealed partial class World
         public bool Foundering { get; set; }
         public double Hourglass { get; set; }
         public bool WaterOnlyStand { get; set; }
-        public double StandBonus { get; set; }
         public List<double> Path { get; set; } = new();
         public int PathIndex { get; set; }
         public double Repath { get; set; }
@@ -238,13 +250,13 @@ public sealed partial class World
         Heading = Ship.Heading, AngVel = Ship.AngVel, SailTarget = Ship.SailTarget, SailFraction = Ship.SailFraction, Rudder = Ship.Rudder,
         HullHp = Ship.HullHp, Cannons = Ship.Cannons, CannonGrade = Ship.CannonGrade, Order = (int)Ship.Order,
         Water = Ship.Water, Leaks = Ship.Leaks, Loaded = (bool[])Ship.Loaded.Clone(), Reload = (double[])Ship.Reload.Clone(),
-        Foundering = Ship.Foundering, Hourglass = Ship.Hourglass, WaterOnlyStand = Ship.WaterOnlyStand, StandBonus = Ship.StandBonus,
+        Foundering = Ship.Foundering, Hourglass = Ship.Hourglass, WaterOnlyStand = Ship.WaterOnlyStand,
         PlayerCarpenterWork = Ship.CarpenterWork, PlayerPatchWork = Ship.PatchWork, PlayerRamCooldown = Ship.RamCooldown,
         PlayerWindDir = Ship.LocalWind.Direction, PlayerWindSpeed = Ship.LocalWind.Speed, PlayerAngleOff = Ship.AngleOffWindDeg,
         LastRudderInput = lastInput.Rudder, LastSailDelta = lastInput.SailDelta,
         LastPaint = new[] { lastPaint.X, lastPaint.Y }, LastPos = new[] { lastPos.X, lastPos.Y }, VisionRadius = VisionRadius, PlayerSpeedMult = Ship.SpeedMult,
         PlayerLastHitBy = Ship.LastHitBy?.Id ?? -1,
-        Reveal = Convert.ToBase64String(Reveal.Bytes),
+        Reveal = PackReveal(Reveal.Bytes),
         DiscoveredPorts = Map.Ports.Where(p => p.Discovered).Select(p => p.Id).ToList(),
         DugTreasures = Map.Treasures.Where(t => t.Dug).Select(t => t.Id).ToList(),
         SalvagedWrecks = Map.Wrecks.Where(w => w.Salvaged).Select(w => w.Id).ToList(),
@@ -269,7 +281,7 @@ public sealed partial class World
             SailTarget = o.SailTarget, Scale = o.Ai.Scale, DamageMult = o.DamageMult, PlayerHostile = o.PlayerHostile,
             AngVel = o.AngVel, Rudder = o.Rudder, SailFraction = o.SailFraction, Order = (int)o.Order,
             Loaded = (bool[])o.Loaded.Clone(), Reload = (double[])o.Reload.Clone(), CarpenterWork = o.CarpenterWork, PatchWork = o.PatchWork,
-            RamCooldown = o.RamCooldown, LastHitBy = o.LastHitBy?.Id ?? -1, Foundering = o.Foundering, Hourglass = o.Hourglass, WaterOnlyStand = o.WaterOnlyStand, StandBonus = o.StandBonus,
+            RamCooldown = o.RamCooldown, LastHitBy = o.LastHitBy?.Id ?? -1, Foundering = o.Foundering, Hourglass = o.Hourglass, WaterOnlyStand = o.WaterOnlyStand,
             Path = o.Ai.Path.SelectMany(p => new[] { p.X, p.Y }).ToList(), PathIndex = o.Ai.PathIndex, Repath = o.Ai.Repath, Tack = o.Ai.Tack, TackHold = o.Ai.TackHold,
             TargetShip = o.Ai.TargetShip, Lost = o.Ai.Lost, WaypointX = o.Ai.Waypoint.X, WaypointY = o.Ai.Waypoint.Y, HasWaypoint = o.Ai.HasWaypoint,
             Fleeing = o.Ai.Fleeing, FleeTime = o.Ai.FleeTime, Id = o.Id,
@@ -284,7 +296,7 @@ public sealed partial class World
         CoveHints = Player.CoveHints.Select(c => new CoveHint { Port = c.Port, X = c.X, Y = c.Y, Radius = c.Radius }).ToList(),
         Digging = Digging, DigWreck = digWreck, DigProgress = DigProgress,
         Parts = (int[])Ship.Parts.Clone(), CustomStations = (int[])Ship.CustomStations.Clone(),
-        Officers = Player.Officers.Select(o => new[] { (int)o.Type, o.Tier }).ToList(), HullsOwned = Stats.HullsOwned.ToList(), MarinesClock = marinesClock,
+        Officers = Player.Officers.Select(o => new[] { (int)o.Type, o.Tier }).ToList(), CartographerRule = true, HullsOwned = Stats.HullsOwned.ToList(), MarinesClock = marinesClock,
         Achievements = Player.Achievements.ToList(), MonstersBeaten = Stats.MonstersBeaten, MonsterClock = MonsterClock, EruptionClock = EruptionClock, RudderJam = RudderJam,
         MonsterType = Monster == null ? -1 : (int)Monster.Type,
         MonsterData = Monster == null ? Array.Empty<double>() : new[] { Monster.Pos.X, Monster.Pos.Y, Monster.Heading, (int)Monster.State, Monster.Timer, Monster.Hp, Monster.Surfaced ? 1 : 0, Monster.FlareTimer, Monster.FlareClock, Monster.Age, Monster.Bites, Monster.Perch.X, Monster.Perch.Y, Monster.GunClock, Monster.Side },
@@ -292,8 +304,11 @@ public sealed partial class World
         Eruptions = Eruptions.Select(e => new[] { e.Pos.X, e.Pos.Y, e.Radius, e.Warning, e.Landed ? 1 : 0, e.Age }).ToList(),
         Storms = Weather.Storms.Select(c => new[] { c.Pos.X, c.Pos.Y, c.Radius, c.Strength, c.Life, c.Age }).ToList(), DockedByAHair = DockedByAHair, RescuedAt = RescuedAt.ToList(), RunOver = RunOver, CauseOfSinking = CauseOfSinking,
         SirenPull = SirenPull, LastMonsterHit = (int)LastMonsterHit, MonsterHitTime = MonsterHitTime,
+        WhirlpoolHitTime = WhirlpoolHitTime, WhirlpoolCoreClock = coreClock, IceHitTime = IceHitTime,
         PricesLastVisit = Map.Ports.Select(p => p.PricesLastVisit == null ? null : (double?[])p.PricesLastVisit.Clone()).ToList(),
         Lanes = routeCache.Select(kv => new double[] { kv.Key.Item1, kv.Key.Item2 }.Concat(kv.Value.SelectMany(p => new[] { p.X, p.Y })).ToArray()).ToList(),
+        Contracts = Player.Contracts.Select(c => c.Clone()).ToList(), TakenOffers = Player.TakenOffers.ToList(),
+        BountyOwed = Player.BountyOwed, BountyShips = Player.BountyShips, SearchedBy = searchedBy.ToList(),
     };
 
     public string SaveJson() => JsonSerializer.Serialize(ToSave(), JsonOptions);
@@ -330,7 +345,6 @@ public sealed partial class World
         w.Ship.Foundering = s.Foundering;
         w.Ship.Hourglass = s.Hourglass;
         w.Ship.WaterOnlyStand = s.WaterOnlyStand;
-        w.Ship.StandBonus = s.StandBonus;
         w.Ship.SetCoarseWind(new Wind(s.PlayerWindDir, s.PlayerWindSpeed), s.PlayerAngleOff);
         w.Ship.CarpenterWork = s.PlayerCarpenterWork;
         w.Ship.PatchWork = s.PlayerPatchWork;
@@ -338,7 +352,7 @@ public sealed partial class World
         w.lastInput = new ShipInput(s.LastRudderInput, s.LastSailDelta);
         w.logNext = true;   // the resumed log opens with the first input after the save
         w.lastPos = s.LastPos is { Length: 2 } lpos ? new Vec2(lpos[0], lpos[1]) : w.Ship.Pos;
-        if (s.Reveal.Length > 0) w.Reveal.Load(Convert.FromBase64String(s.Reveal));
+        if (s.Reveal.Length > 0) w.Reveal.Load(UnpackReveal(s.Reveal));
         w.lastPaint = s.LastPaint is { Length: 2 } lp ? new Vec2(lp[0], lp[1]) : w.Ship.Pos;
         w.Ship.SpeedMult = s.PlayerSpeedMult;
         foreach (var p in w.Map.Ports) p.Discovered = false;
@@ -414,7 +428,6 @@ public sealed partial class World
             ship.Foundering = o.Foundering;
             ship.Hourglass = o.Hourglass;
             ship.WaterOnlyStand = o.WaterOnlyStand;
-            ship.StandBonus = o.StandBonus;
             ship.SetCoarseWind(new Wind(o.WindDir, o.WindSpeed), o.AngleOff);
             var path = new List<Vec2>();
             for (int i = 0; i + 1 < o.Path.Count; i += 2) path.Add(new Vec2(o.Path[i], o.Path[i + 1]));
@@ -440,7 +453,7 @@ public sealed partial class World
         w.Lantern = s.Lantern;
         w.DirectorEnabled = s.DirectorEnabled;
         w.MonstersEnabled = s.MonstersEnabled;
-        foreach (var u in s.Unique) w.Player.Unique.Add(u);
+        foreach (var u in s.Unique) if (BlackMarketDef.All.Any(d => d.Key == u)) w.Player.Unique.Add(u);   // the bilge engine is gone
         foreach (var c in s.Cosmetics) w.Player.Cosmetics.Add(c);
         for (int i = 0; i < w.Player.Loadout.Length && i < s.Loadout.Count; i++) w.Player.Loadout[i] = s.Loadout[i] ?? "";
         w.Player.BottleMaps.AddRange(s.BottleMaps);
@@ -448,9 +461,11 @@ public sealed partial class World
         w.Digging = s.Digging;
         w.digWreck = s.DigWreck;
         w.DigProgress = s.DigProgress;
-        if (s.Parts.Length == 9) s.Parts.CopyTo(w.Ship.Parts, 0);
+        if (s.Parts.Length == 8) s.Parts.CopyTo(w.Ship.Parts, 0);
+        else if (s.Parts.Length == 9) s.Parts.Where((_, i) => i != 6).ToArray().CopyTo(w.Ship.Parts, 0);   // older saves carried the pumps at 6
         if (s.CustomStations.Length == 4) s.CustomStations.CopyTo(w.Ship.CustomStations, 0);
         foreach (var o in s.Officers) if (o.Length == 2) w.Player.Officers.Add(new Officer { Type = (OfficerType)o[0], Tier = o[1] });
+        if (!s.CartographerRule && !w.HasCartographer) w.Player.Officers.Add(new Officer { Type = OfficerType.Cartographer, Tier = 0 });
         foreach (var h in s.HullsOwned) w.Stats.HullsOwned.Add(h);
         w.marinesClock = s.MarinesClock;
         w.ApplyUnique();
@@ -487,6 +502,9 @@ public sealed partial class World
         w.SirenPull = s.SirenPull;
         w.LastMonsterHit = (MonsterType)s.LastMonsterHit;
         w.MonsterHitTime = s.MonsterHitTime;
+        w.WhirlpoolHitTime = s.WhirlpoolHitTime;
+        w.coreClock = s.WhirlpoolCoreClock;
+        w.IceHitTime = s.IceHitTime;
         for (int i = 0; i < Math.Min(s.PricesLastVisit.Count, w.Map.Ports.Count); i++)
             if (s.PricesLastVisit[i] is { } prices && prices.Length == Goods.Count) w.Map.Ports[i].PricesLastVisit = prices;
         foreach (var lane in s.Lanes)
@@ -496,6 +514,11 @@ public sealed partial class World
             for (int i = 2; i + 1 < lane.Length; i += 2) path.Add(new Vec2(lane[i], lane[i + 1]));
             w.routeCache[((int)lane[0], (int)lane[1])] = path;
         }
+        w.Player.Contracts.AddRange(s.Contracts.Select(c => c.Clone()));
+        foreach (var k in s.TakenOffers) w.Player.TakenOffers.Add(k);
+        w.Player.BountyOwed = s.BountyOwed;
+        w.Player.BountyShips = s.BountyShips;
+        foreach (var id in s.SearchedBy) w.searchedBy.Add(id);
         w.VisionRadius = s.VisionRadius > 0 ? s.VisionRadius : w.VisionAt(w.Ship.Pos);
         return w;
     }
@@ -514,6 +537,7 @@ public sealed partial class World
         Need(s.Officers.All(o => o.Length == 2 && Enum.IsDefined((OfficerType)o[0]) && In(o[1], Officers.Price.Length)), "officer");
         Need(s.MonsterType < 0 || MonsterDefs.All.Any(m => (int)m.Type == s.MonsterType), $"monster {s.MonsterType}");
         Need(s.Flotsam.All(f => f.Good < 0 || In(f.Good, Goods.Count)), "flotsam good");
+        Need(s.Contracts.All(c => Enum.IsDefined(c.Kind) && c.Slots >= 0), "contract");
         foreach (var o in s.Ships)
         {
             Need(Hulls.Exists(o.Hull) && Enum.IsDefined((Role)o.Role) && Enum.IsDefined((Faction)o.Faction) && In(o.CargoGood, Goods.Count), $"ship {o.Id}");
@@ -533,6 +557,28 @@ public sealed partial class World
         Need(s.SalvagedWrecks.All(i => In(i, map.Wrecks.Count)), "wreck index");
         Need(s.CoveHints.All(h => In(h.Port, ports)) && s.Ledger.All(e => In(e.Port, ports) && In((int)e.Good, Goods.Count)), "ledger or rumour port");
         Need(s.Ships.All(o => o.HomePort < ports && o.DestPort < ports), "ship port");
+        Need(s.Contracts.All(c => In(c.From, ports) && In(c.To, ports)), "contract port");
+    }
+
+    /// <summary>
+    /// The chart's ink, deflated ("z:" + base64): on the 18 × 13.5 km chart the raw mask is 190 KB, mostly blank, and it
+    /// packs to a few KB. Saves from before carry plain base64, which still loads.
+    /// </summary>
+    static string PackReveal(byte[] bits)
+    {
+        using var ms = new MemoryStream();
+        using (var z = new System.IO.Compression.DeflateStream(ms, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true))
+            z.Write(bits, 0, bits.Length);
+        return "z:" + Convert.ToBase64String(ms.ToArray());
+    }
+
+    static byte[] UnpackReveal(string s)
+    {
+        if (!s.StartsWith("z:")) return Convert.FromBase64String(s);
+        using var z = new System.IO.Compression.DeflateStream(new MemoryStream(Convert.FromBase64String(s[2..])), System.IO.Compression.CompressionMode.Decompress);
+        using var ms = new MemoryStream();
+        z.CopyTo(ms);
+        return ms.ToArray();
     }
 
     public static World LoadJson(string json) =>

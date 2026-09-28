@@ -24,6 +24,14 @@ public partial class MonsterView : Node2D
     readonly float[] armDeath = new float[8];
     Monster? last;                  // the beast that just left (dying or escaping)
     float leaveT = -1;
+    // The beast's pose at the last two ticks: drawn between them, as the ships are, so it does not judder against the
+    // smoothly drawn player and camera (the sim steps at 30 Hz).
+    Monster? posed;
+    Vec2 prevPos, curPos;
+    double prevHeading, curHeading;
+    long posedTick = -1;
+    /// <summary>How far between the last two ticks to draw (Main's interpolation fraction, as for the fleet).</summary>
+    public float Alpha = 1;
 
     static readonly InkBatch ink = new(), tex = new();
     static readonly Color Surf = new(0.985f, 0.975f, 0.94f);
@@ -44,6 +52,25 @@ public partial class MonsterView : Node2D
         night.AddChild(glow);
         AddChild(night);
     }
+
+    /// <summary>Once a tick, after the world steps (as <see cref="FleetView.Sync"/>).</summary>
+    public void Sync()
+    {
+        var m = world.Monster;
+        bool fresh = m != posed || world.Ticks - posedTick > 1;   // a new beast, or ticks run without us: no lerp
+        posed = m;
+        posedTick = world.Ticks;
+        if (m == null) return;
+        prevPos = fresh ? m.Pos : curPos;
+        prevHeading = fresh ? m.Heading : curHeading;
+        curPos = m.Pos;
+        curHeading = m.Heading;
+    }
+
+    /// <summary>Where to draw the beast this frame: between its last two ticks while it is in play.</summary>
+    (Vec2 Pos, double Heading) Pose(Monster m) => m == posed && m == world.Monster
+        ? (Vec2.Lerp(prevPos, curPos, Alpha), Angles.LerpAngle(prevHeading, curHeading, Alpha))
+        : (m.Pos, m.Heading);
 
     public override void _Process(double delta)
     {
@@ -378,8 +405,9 @@ public partial class MonsterView : Node2D
     void Ghost(PaintLayer layer, Monster m, float px, float fade)
     {
         var t = Art.Tex("monsters/ghost");
-        var p = Ink.V(m.Pos);
-        float h = (float)m.Heading;
+        var (pos, heading) = Pose(m);
+        var p = Ink.V(pos);
+        float h = (float)heading;
         bool flare = m.FlareTimer > 0;
         float solid = flare ? Mathf.Clamp((3f - (float)m.FlareTimer) / 0.25f, 0, 1) * Mathf.Clamp((float)m.FlareTimer / 0.4f, 0, 1) : 0f;
         float shimmer = 0.42f + 0.08f * Mathf.Sin(time * 3.1f) + 0.05f * Mathf.Sin(time * 7.7f);
@@ -439,7 +467,7 @@ public partial class MonsterView : Node2D
             ink.Glow(l, (7 + 12 * solid) * Ink.PxPerM * 0.5f, warm with { A = 0.55f * glow }, warm with { A = 0 }, 20);
             ink.Disc(l, 1.4f * Ink.PxPerM, warm.Lightened(0.4f) with { A = 0.95f * glow }, 10);
         }
-        if (fade >= 1) Target(m.Targets.Count > 0 ? Ink.V(m.Targets[0].Pos) : p, m.Targets.Count > 0 ? (float)m.Targets[0].Radius : 12f, (float)(m.Hp / m.Def.Hp), px, flare);
+        if (fade >= 1) Target(p, m.Targets.Count > 0 ? (float)m.Targets[0].Radius : 12f, (float)(m.Hp / m.Def.Hp), px, flare);
     }
 
     // ---------------------------------------------------------------- crocodile

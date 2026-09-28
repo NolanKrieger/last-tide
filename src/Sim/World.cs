@@ -121,7 +121,9 @@ public sealed partial class World
         var helm = input;
         if (RudderJam > 0) helm = helm with { Rudder = 0 };
         else if (SirenPull != 0) helm = helm with { Rudder = Math.Clamp(input.Rudder + SirenPull, -1, 1) };
-        Ship.Step(Dt, w, helm, Islands);
+        Ship.Step(Dt, w, helm, Map.IslandsAround(Ship.Pos));
+        WhirlpoolTick();
+        IceTick();
         KeepOnTheChart(before);
         Mark("ship");
         MonsterTick();
@@ -131,12 +133,16 @@ public sealed partial class World
         Mark("combat+fleet");
         MatchMaps();
         ActionTick(input.Action);
+        OfficeTick();
         AchievementsTick();
         Mark("exploration");
         foreach (var port in Map.Ports)
             port.Market.Tick(Dt, Rng);
         Mark("markets");
-        if (SpyglassOn && Ticks % 10 == 0)
+        // Only a cartographer keeps the chart (Nolan, 2026-09-27): with none aboard she still sees, but nothing is inked
+        // and no port is marked; what was charted before stays on the chart for the next one.
+        bool charting = HasCartographer;
+        if (SpyglassOn && Ticks % 10 == 0 && charting)
         {
             // Ink a thin fan of the chart along the glass.
             for (double f = VisionRadius; f < SpyglassRange; f += RevealMask.Cell * 2)
@@ -147,11 +153,8 @@ public sealed partial class World
         }
         if (double.IsNaN(lastPaint.X) || Ship.Pos.DistanceTo(lastPaint) >= 6)
         {
-            Reveal.Paint(Ship.Pos, VisionRadius);
+            ChartAround();   // the vision radius × his reach (1 / 1.25 / 1.5); nothing with no cartographer
             lastPaint = Ship.Pos;
-            foreach (var port in Map.Ports)
-                if (!port.Discovered && port.Harbor.DistanceTo(Ship.Pos) <= VisionRadius + port.RingRadius)
-                    Discover(port);
             var region = Map.RegionAt(Ship.Pos).Type;
             Stats.RegionsEntered.Add(region);
         }
@@ -174,21 +177,15 @@ public sealed partial class World
         }
     }
 
-    /// <summary>The parchment ends at the map edge, and only small hulls fit the Mangrove Maze (GDD §5).</summary>
+    /// <summary>
+    /// Only small hulls fit the Mangrove Maze (GDD §5). There is no wall at the chart's edge: the sea goes on, and beyond
+    /// it the whirlpools and the beasts are the only limit (§5 "Beyond the chart").
+    /// </summary>
     void KeepOnTheChart(Vec2 before)
     {
-        var p = Ship.Pos;
-        double wall = 30;
-        double x = Math.Clamp(p.X, -Map.HalfW + wall, Map.HalfW - wall);
-        double y = Math.Clamp(p.Y, -Map.HalfH + wall, Map.HalfH - wall);
-        if (x != p.X || y != p.Y)
-        {
-            Ship.Pos = new Vec2(x, y);
-            Ship.Vel = new Vec2(x != p.X ? 0 : Ship.Vel.X, y != p.Y ? 0 : Ship.Vel.Y);
-        }
         MangroveBlocked = false;
-        if (Map.Regions.Length > 0 && !RegionDef.MangroveHulls.Contains(Ship.Hull.Id)
-            && Map.RegionAt(Ship.Pos).Type == RegionType.Mangrove && Map.RegionAt(before).Type != RegionType.Mangrove)
+        bool Maze(Vec2 p) => Map.InBounds(p) && Map.RegionAt(p).Type == RegionType.Mangrove;
+        if (Map.Regions.Length > 0 && !RegionDef.MangroveHulls.Contains(Ship.Hull.Id) && Maze(Ship.Pos) && !Maze(before))
         {
             Ship.Pos = before;
             Ship.Vel = Ship.Vel * 0.2;
@@ -277,7 +274,9 @@ public sealed partial class World
         foreach (var e in Player.Ledger) { h.Add(e.Port); h.Add(e.Price); h.Add(e.Day); }
         foreach (var m in Player.BottleMaps) { h.Add(m.Treasure); h.Add(m.Solved ? 1 : 0); h.Add(m.Rotation); }
         foreach (var o in Player.Officers) { h.Add((int)o.Type); h.Add(o.Tier); }
-        h.Add(RudderJam); h.Add(SirenPull); h.Add(EruptionClock); h.Add(MonsterHitTime); h.Add(lastUpkeepDay); h.Add(tradedThisVisit ? 1 : 0);
+        h.Add(RudderJam); h.Add(SirenPull); h.Add(EruptionClock); h.Add(MonsterHitTime); h.Add(WhirlpoolHitTime); h.Add(coreClock); h.Add(IceHitTime); h.Add(lastUpkeepDay); h.Add(tradedThisVisit ? 1 : 0);
+        foreach (var c in Player.Contracts) { h.Add((int)c.Kind); h.Add(c.From); h.Add(c.To); h.Add(c.Slots); h.Add(c.Pay); h.Add(c.Advance); h.Add(c.Deadline); h.Add(c.Offer); }
+        h.Add(Player.TakenOffers.Count); h.Add(Player.BountyOwed); h.Add(Player.BountyShips); h.Add(searchedBy.Count);
         return h.Value;
     }
 

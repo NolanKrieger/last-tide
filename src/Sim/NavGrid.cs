@@ -86,6 +86,61 @@ public sealed class NavGrid
     public bool IsLand(Vec2 p) => IsLand(ToX(p.X), ToY(p.Y));
     public bool IsSea(Vec2 p) => !IsLand(p);
 
+    bool[]? open;
+
+    /// <summary>Closes every cell within <paramref name="radius"/> of a point, as if land (a whirlpool's core).</summary>
+    public void Close(Vec2 c, double radius)
+    {
+        for (int y = ToY(c.Y - radius); y <= ToY(c.Y + radius); y++)
+            for (int x = ToX(c.X - radius); x <= ToX(c.X + radius); x++)
+                if (x >= 0 && y >= 0 && x < W && y < H && Centre(x, y).DistanceTo(c) <= radius) land[y * W + x] = true;
+        open = null;
+    }
+
+    /// <summary>
+    /// True in the largest connected body of sea: the open water every ship shares. A lagoon whose pass is too tight for
+    /// the grid, or a pocket of water walled in by islands, is sea but not open sea.
+    /// </summary>
+    public bool IsOpenSea(Vec2 p)
+    {
+        open ??= LargestSea();
+        int x = ToX(p.X), y = ToY(p.Y);
+        return x >= 0 && y >= 0 && x < W && y < H && open[y * W + x];
+    }
+
+    bool[] LargestSea()
+    {
+        var label = new int[W * H];
+        int best = 0, bestSize = -1, next = 0;
+        var queue = new Queue<int>();
+        for (int s = 0; s < label.Length; s++)
+        {
+            if (land[s] || label[s] != 0) continue;
+            label[s] = ++next;
+            int size = 0;
+            queue.Enqueue(s);
+            while (queue.Count > 0)
+            {
+                int c = queue.Dequeue();
+                size++;
+                int x = c % W, y = c / W;
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int nx = x + dx, ny = y + dy;
+                        if ((dx == 0 && dy == 0) || IsLand(nx, ny) || label[ny * W + nx] != 0) continue;
+                        if (dx != 0 && dy != 0 && IsLand(x + dx, y) && IsLand(x, y + dy)) continue;   // the same corner rule as Distances
+                        label[ny * W + nx] = next;
+                        queue.Enqueue(ny * W + nx);
+                    }
+            }
+            if (size > bestSize) { bestSize = size; best = next; }
+        }
+        var result = new bool[W * H];
+        for (int i = 0; i < result.Length; i++) result[i] = label[i] == best;
+        return result;
+    }
+
     /// <summary>Breadth-first sea distances (in metres, 8-connected) from a point; −1 where unreachable.</summary>
     public double[] Distances(Vec2 from) => Distances(from, null);
 
@@ -122,6 +177,46 @@ public sealed class NavGrid
                 }
         }
         return dist;
+    }
+
+    /// <summary>A sea-distance field (m, −1 unreachable) confined to a window around a point, for local lanes.</summary>
+    public readonly record struct LocalField(int X0, int Y0, int W, int H, float[] D)
+    {
+        public float At(int x, int y) => x < X0 || y < Y0 || x >= X0 + W || y >= Y0 + H ? -1 : D[(y - Y0) * W + x - X0];
+    }
+
+    /// <summary>As <see cref="Distances(Vec2)"/>, but only within <paramref name="radius"/> (square window) of the start.</summary>
+    public LocalField LocalDistances(Vec2 from, double radius)
+    {
+        int r = (int)Math.Ceiling(radius / Cell);
+        int sx = ToX(from.X), sy = ToY(from.Y);
+        if (IsLand(sx, sy)) (sx, sy) = NearestSea(sx, sy);
+        int x0 = Math.Max(0, sx - r), y0 = Math.Max(0, sy - r), x1 = Math.Min(W - 1, sx + r), y1 = Math.Min(H - 1, sy + r);
+        int w = x1 - x0 + 1, h = y1 - y0 + 1;
+        var dist = new float[w * h];
+        Array.Fill(dist, -1f);
+        var field = new LocalField(x0, y0, w, h, dist);
+        if (IsLand(sx, sy)) return field;
+        bool Blocked(int x, int y) => x < x0 || y < y0 || x > x1 || y > y1 || IsLand(x, y);
+        var queue = new Queue<(int, int)>();
+        dist[(sy - y0) * w + sx - x0] = 0;
+        queue.Enqueue((sx, sy));
+        while (queue.Count > 0)
+        {
+            var (x, y) = queue.Dequeue();
+            float d = dist[(y - y0) * w + x - x0];
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0) continue;
+                    int nx = x + dx, ny = y + dy;
+                    if (Blocked(nx, ny) || dist[(ny - y0) * w + nx - x0] >= 0) continue;
+                    if (dx != 0 && dy != 0 && Blocked(x + dx, y) && Blocked(x, y + dy)) continue;
+                    dist[(ny - y0) * w + nx - x0] = d + (float)(dx != 0 && dy != 0 ? Cell * 1.41421356 : Cell);
+                    queue.Enqueue((nx, ny));
+                }
+        }
+        return field;
     }
 
     public (int, int) NearestSea(int x, int y)

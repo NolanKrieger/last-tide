@@ -6,6 +6,9 @@
     <AssemblyName>LastTide.Sim</AssemblyName>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Optimized in every configuration: map generation traces a thousand coastlines at voyage start, and the Godot
+         editor and `dotnet test` build Debug by default. -->
+    <Optimize>true</Optimize>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Sim.Tests" />

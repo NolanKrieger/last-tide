@@ -1,8 +1,8 @@
 namespace LastTide.Sim;
 
-public enum Part { Sails, Rigging, Planking, Copper, Cannons, Ram, Pumps, Hold, Lantern }
+public enum Part { Sails, Rigging, Planking, Copper, Cannons, Ram, Hold, Lantern }
 
-/// <summary>One row of the parts table (GDD §7): nine parts, five grades, price scaling with hull size.</summary>
+/// <summary>One row of the parts table (GDD §7): eight parts, five grades, price scaling with hull size.</summary>
 public sealed record PartDef(Part Id, string Key, int BasePrice, bool MovesWithCaptain, bool PerGun)
 {
     public static readonly PartDef[] All =
@@ -13,7 +13,6 @@ public sealed record PartDef(Part Id, string Key, int BasePrice, bool MovesWithC
         new(Part.Copper, "copper", 180, false, false),
         new(Part.Cannons, "cannons", 60, true, true),
         new(Part.Ram, "ram", 100, false, false),
-        new(Part.Pumps, "pumps", 80, true, false),
         new(Part.Hold, "hold", 120, false, false),
         new(Part.Lantern, "lantern", 90, true, false),
     };
@@ -34,9 +33,9 @@ public sealed record PartDef(Part Id, string Key, int BasePrice, bool MovesWithC
     public static readonly int[] PounderByGrade = { 4, 6, 9, 12, 18, 24 };
 }
 
-public enum OfficerType { Lookout, Marines, Quartermaster }
+public enum OfficerType { Lookout, Marines, Quartermaster, Cartographer }
 
-/// <summary>A hired officer (GDD §7): one slot per type, three tiers.</summary>
+/// <summary>A hired officer (GDD §7): one slot per type, three tiers. The cartographer has a berth of his own (no slot).</summary>
 public sealed class Officer
 {
     public OfficerType Type { get; set; }
@@ -55,4 +54,21 @@ public static class Officers
     public static readonly double[] QuartermasterWages = { 0.10, 0.20, 0.30 };
     public static readonly double[] QuartermasterProvisions = { 0.15, 0.30, 0.50 };
     public const double MarinesRange = 120, MarinesPeriod = 6;
+
+    // ---- The cartographer (Nolan, 2026-09-27; GDD §7, §19): without one nothing is charted and the chart stays shut ----
+    /// <summary>How far he inks, as a multiple of the vision radius: green 1.0, seasoned 1.25, legendary 1.5.</summary>
+    public static readonly double[] CartographerReach = { 1.0, 1.25, 1.5 };
+    public static readonly int[] CartographerPrice = { 40, 120, 320 };
+    public static readonly int[] CartographerWage = { 3, 6, 12 };
+
+    /// <summary>Gold to hire, per type (in <see cref="OfficerType"/> order) and tier.</summary>
+    public static readonly int[][] PriceByType = { Price, Price, Price, CartographerPrice };
+    /// <summary>Wages a day, per type and tier.</summary>
+    public static readonly int[][] WageByType = { Wage, Wage, Wage, CartographerWage };
+    /// <summary>Whether the type fills one of the hull's officer slots; the cartographer berths apart (Nolan).</summary>
+    public static readonly bool[] TakesSlot = { true, true, true, false };
+
+    public static int PriceOf(OfficerType type, int tier) => PriceByType[(int)type][tier];
+    public static int WageOf(OfficerType type, int tier) => WageByType[(int)type][tier];
+    public static bool UsesSlot(OfficerType type) => TakesSlot[(int)type];
 }

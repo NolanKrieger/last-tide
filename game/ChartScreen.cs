@@ -34,7 +34,7 @@ public partial class ChartScreen : CanvasLayer
         note.AddThemeStyleboxOverride("normal", box);
         note.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
         note.AddThemeFontSizeOverride("font_size", 18);
-        note.CustomMinimumSize = new Vector2(260, 34);
+        note.CustomMinimumSize = new Vector2(300, 34);
         note.TextSubmitted += OnNoteSubmitted;
         AddChild(note);
     }
@@ -98,8 +98,9 @@ public partial class ChartCanvas : Control
     ChartOverlay overlay = null!;
     ColorRect wash = null!;
     UiCartouche cartouche = null!;
-    Label subtitle = null!, hint = null!;
+    Label subtitle = null!;
     ChartKey key = null!;
+    ChartControls controls = null!;
     BottleMapsPanel maps = null!;
     float zoom = 1f;
     Vector2 pan;
@@ -141,21 +142,48 @@ public partial class ChartCanvas : Control
         AddChild(key);
         maps = new BottleMapsPanel { World = World };
         AddChild(maps);
-        hint = Parchment.L(Text.Get("CHART_HINT"), "Flavour");
-        hint.AddThemeFontSizeOverride("font_size", 15);
-        hint.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        hint.VerticalAlignment = VerticalAlignment.Bottom;
-        AddChild(hint);
+        controls = new ChartControls();
+        AddChild(controls);
         Resized += Layout;
     }
 
     public void Open()
     {
-        hint.Text = Text.Get("CHART_HINT");   // key names follow the bindings
         Layout();
+        FrameCharted();
         map.Prepare();
         Changed();
         GrabFocus();
+    }
+
+    /// <summary>
+    /// The chart opens on the water she has charted, her own position and her deliveries, not on the whole sheet: early
+    /// in a voyage the charted sea is one corner of the map, and at the whole-sheet scale its names crowd each other.
+    /// </summary>
+    void FrameCharted()
+    {
+        var r = World.Reveal;
+        var ship = World.Ship.Pos;
+        double x0 = ship.X, x1 = ship.X, y0 = ship.Y, y1 = ship.Y;
+        void Take(double x, double y) { x0 = Math.Min(x0, x); x1 = Math.Max(x1, x); y0 = Math.Min(y0, y); y1 = Math.Max(y1, y); }
+        for (int y = 0; y < r.H; y += 2)
+            for (int x = 0; x < r.W; x += 2)
+                if (r.Get(x, y)) Take((x + 0.5) * RevealMask.Cell - Map.HalfW, (y + 0.5) * RevealMask.Cell - Map.HalfH);
+        foreach (var contract in World.Player.Contracts) Take(World.Map.Ports[contract.To].Pos.X, World.Map.Ports[contract.To].Pos.Y);
+        // A margin round it, and never closer in than a sea of about 1.5 × 1.1 km.
+        float w = (float)Math.Max(x1 - x0, 1200) * 1.25f, h = (float)Math.Max(y1 - y0, 900) * 1.25f;
+        zoom = Mathf.Clamp(Mathf.Min(View.Size.X / (w * BaseScale), View.Size.Y / (h * BaseScale)), 1f, 3.5f);
+        pan = -new Vector2((float)(x0 + x1) / 2, (float)(y0 + y1) / 2) * MapScale;
+        ClampPan();
+    }
+
+    /// <summary>Space: the ship back in the middle of the chart, at the zoom it is at.</summary>
+    public void CentreOnShip()
+    {
+        var p = World.Ship.Pos;
+        pan = -new Vector2((float)p.X, (float)p.Y) * MapScale;
+        ClampPan();
+        Changed();
     }
 
     public void GrabFocusIfOpen() { if (IsVisibleInTree()) GrabFocus(); }
@@ -182,7 +210,9 @@ public partial class ChartCanvas : Control
         int mapCount = World.Player.BottleMaps.Count(m => !World.Map.Treasures[m.Treasure].Dug);
         cartouche.PlateHeight = small ? 66 : 92;
         cartouche.FontSize = small ? 28 : 40;
-        float top = cartouche.PlateHeight + (small ? 30 : 42);
+        // The cartouche, the subtitle under it, then the neatline's band: each clear of the next.
+        float cartY = small ? 10 : 14, subH = small ? 22 : 26;
+        float top = cartY + cartouche.PlateHeight + subH + (small ? 16 : 20);
         float bottom = small ? 34 : 46;
         // The neatline keeps the chart's own 4:3; the key stands in the left margin, bottle maps and the hint in the right.
         float side = Mathf.Clamp(s.X * 0.15f, 150, 270);
@@ -196,22 +226,22 @@ public partial class ChartCanvas : Control
         overlay.Size = s;
         var cs = cartouche.GetCombinedMinimumSize();
         cartouche.Size = cs;
-        cartouche.Position = new Vector2((s.X - cs.X) / 2, small ? 10 : 14);
-        subtitle.Position = new Vector2(View.Position.X, View.Position.Y - 36);
-        subtitle.Size = new Vector2(View.Size.X, 26);
+        cartouche.Position = new Vector2((s.X - cs.X) / 2, cartY);
+        subtitle.Position = new Vector2(View.Position.X, cartY + cartouche.PlateHeight);
+        subtitle.Size = new Vector2(View.Size.X, subH);
         subtitle.HorizontalAlignment = HorizontalAlignment.Center;
         subtitle.AddThemeFontSizeOverride("font_size", small ? 15 : 18);
         float colW = View.Position.X - 50;
         key.Position = new Vector2(30, View.Position.Y);
         key.Size = new Vector2(colW, View.Size.Y);
         key.Small = small;
+        // The right margin mirrors the key: how to work the chart at the top, or under the bottle maps when she has any.
+        controls.Small = small;
+        controls.Size = new Vector2(colW - 24, controls.Needed);   // clear of the sheet's corner scrollwork
+        controls.Position = new Vector2(View.End.X + 24, mapCount > 0 ? View.End.Y - controls.Needed : View.Position.Y);
         maps.Visible = mapCount > 0;
         maps.Position = new Vector2(View.End.X + 24, View.Position.Y);
-        maps.Size = new Vector2(colW - 4, View.Size.Y * (mapCount > 0 ? 0.72f : 0));
-        hint.AddThemeFontSizeOverride("font_size", small ? 14 : 16);
-        hint.CustomMinimumSize = new Vector2(colW - 4, 0);
-        hint.Size = new Vector2(colW - 4, View.Size.Y * 0.25f);
-        hint.Position = new Vector2(View.End.X + 24, View.End.Y - hint.Size.Y);
+        maps.Size = new Vector2(colW - 24, mapCount > 0 ? Math.Max(0, View.Size.Y - controls.Needed - 20) : 0);
         ClampPan();
     }
 
@@ -265,6 +295,7 @@ public partial class ChartCanvas : Control
                 else if (e.IsActionPressed("ui_up", true)) step.Y = 90;
                 else if (e.IsActionPressed("ui_down", true)) step.Y = -90;
                 if (step != Vector2.Zero) { pan += step; ClampPan(); Changed(); AcceptEvent(); }
+                else if (k.Keycode == Key.Space) { CentreOnShip(); AcceptEvent(); }
                 else if (k.Keycode is Key.Equal or Key.Plus or Key.KpAdd) { ZoomAt(1.25f, View.GetCenter()); AcceptEvent(); }
                 else if (k.Keycode is Key.Minus or Key.KpSubtract) { ZoomAt(0.8f, View.GetCenter()); AcceptEvent(); }
                 break;
@@ -444,12 +475,16 @@ public partial class ChartMap : Control
         RegionType.Volcanic => new Color(0.70f, 0.64f, 0.58f),
         RegionType.Sargasso => new Color(0.74f, 0.76f, 0.52f),
         RegionType.SirenRuins => new Color(0.84f, 0.70f, 0.64f),
+        RegionType.IceReach => new Color(0.84f, 0.85f, 0.82f),
+        RegionType.Maelstrom => new Color(0.66f, 0.64f, 0.58f),
+        RegionType.CorsairKeys => new Color(0.88f, 0.80f, 0.60f),
         _ => Ink.Land,
     };
 
     void PlaceMonsters()
     {
         monsters.Clear();
+        float mon = MonsterSize();
         string[] tex = { "monster-whale", "monster-serpent", "monster-hippocamp", "monster-fish" };
         var rng = new Rng((ulong)(World.Seed * 7919 + 3));
         var order = tex.OrderBy(_ => rng.NextDouble()).ToArray();
@@ -467,6 +502,9 @@ public partial class ChartMap : Control
                 if (!blank || p.DistanceTo(World.Ship.Pos) < 1100) continue;
                 if (roses.Any(r => r.DistanceTo(p) < 800) || World.Pins.Any(q => q.Pos.DistanceTo(p) < 600)) continue;
                 if (World.Player.CoveHints.Any(h => new Vec2(h.X, h.Y).DistanceTo(p) < h.Radius + 500)) continue;
+                // Wholly inside the opening view or wholly outside it: never a fin cut off at the neatline.
+                var box = new Rect2(Canvas.ToScreen(p) - new Vector2(mon, mon * 0.8f) / 2, new Vector2(mon, mon * 0.8f));
+                if (box.Intersects(Canvas.View) && !Canvas.View.Encloses(box)) continue;
                 double edge = Math.Min(Math.Min(p.X + Map.HalfW, Map.HalfW - p.X), Math.Min(p.Y + Map.HalfH, Map.HalfH - p.Y));
                 candidates.Add((p, -edge + rng.NextDouble() * 300));
             }
@@ -483,11 +521,14 @@ public partial class ChartMap : Control
         regionNames.Clear();
         regionFont ??= RegionFont();
         float s = Canvas.MapScale;
+        // Port names as boxes in metres at the opening zoom (either side of the port, as they may go right or left).
+        var set = new List<(Vec2 At, double Hx, double Hy)>();   // region names already lettered
+        var names = World.Map.Ports.Where(Canvas.Shown).Select(p => (p.Pos, W: Fonts.Body.GetStringSize(p.Name, HorizontalAlignment.Left, -1, 15).X / s + 15, H: 20 / s)).ToList();
         foreach (var region in World.Map.Regions)
         {
             if (!World.Reveal.IsRevealed(region.Seed)) continue;
             string name = Text.Get("REGION_" + region.Def.Key).ToUpperInvariant();
-            var size = regionFont.GetStringSize(name, HorizontalAlignment.Left, -1, 22) / s;   // in metres at the opening zoom
+            var size = regionFont.GetStringSize(name, HorizontalAlignment.Left, -1, RegionSize(Canvas.Zoom)) / s;   // in metres at the opening zoom
             Vec2 best = region.Seed;
             double bestScore = double.MaxValue;
             double hx = size.X / 2 + 20, hy = size.Y / 2 + 10;
@@ -505,13 +546,20 @@ public partial class ChartMap : Control
                         double gap = Math.Sqrt(dx * dx + dy * dy) - isl.BoundRadius;
                         if (gap < 0) score += 3 + Math.Min(4, -gap / 40);
                     }
-                    foreach (var port in World.Map.Ports)
-                        if (Math.Abs(port.Pos.X - c.X) < hx + 40 && Math.Abs(port.Pos.Y - c.Y) < hy + 30) score += 5;
+                    foreach (var (pos, w, h) in names)
+                        if (Math.Abs(pos.X - c.X) < hx + w && Math.Abs(pos.Y - c.Y) < hy + h) score += 5;
+                    foreach (var (other, ox, oy) in set)
+                        if (Math.Abs(other.X - c.X) < hx + ox && Math.Abs(other.Y - c.Y) < hy + oy) score += 12;
                     if (score < bestScore) { bestScore = score; best = c; }
                 }
             regionNames.Add((best, name));
+            set.Add((best, hx, hy));
         }
     }
+
+    float MonsterSize() => Mathf.Clamp(Canvas.View.Size.Y * 0.2f, 110, 250) * Mathf.Sqrt(Canvas.Zoom);
+
+    static int RegionSize(float zoom) => (int)(22 * Mathf.Pow(zoom, 0.35f));
 
     static FontVariation RegionFont()
     {
@@ -549,7 +597,7 @@ public partial class ChartMap : Control
             }
 
         // Here be monsters, in the blank margins.
-        float mon = Mathf.Clamp(c.View.Size.Y * 0.2f, 110, 250) * Mathf.Sqrt(c.Zoom);
+        float mon = MonsterSize();
         foreach (var (pos, tex) in monsters)
             if (Parchment.Tex(tex) is { } t)
             {
@@ -612,7 +660,7 @@ public partial class ChartMap : Control
 
         // Region names lettered in the sea.
         regionFont ??= RegionFont();
-        int rsize = (int)(22 * Mathf.Pow(c.Zoom, 0.35f));
+        int rsize = RegionSize(c.Zoom);
         foreach (var (pos, name) in regionNames)
         {
             var at = c.ToScreen(pos);
@@ -658,6 +706,24 @@ public partial class ChartMap : Control
             wrecks.Add(p + new Vector2(3, 3)); wrecks.Add(p + new Vector2(4, -5));
         }
         if (wrecks.Count > 0) DrawMultiline(wrecks.ToArray(), Ink.Black, 1.8f);
+        // The Maelstrom's whirlpools, once charted: a small inked spiral at each, its reach dotted round it.
+        foreach (var wp in World.Map.Whirlpools)
+        {
+            if (!World.Reveal.IsRevealed(wp.Pos)) continue;
+            var p = c.ToScreen(wp.Pos);
+            float r = Mathf.Max(6, (float)wp.Radius * s);
+            for (int arm = 0; arm < 3; arm++)
+            {
+                var pts = new Vector2[10];
+                for (int i = 0; i < pts.Length; i++)
+                {
+                    float t = i / (float)(pts.Length - 1);
+                    float a = arm * Mathf.Tau / 3 + t * 3.2f;
+                    pts[i] = p + Vec(a) * Mathf.Lerp(r * 0.9f, r * 0.15f, t);
+                }
+                DrawPolyline(pts, Ink.Black with { A = 0.8f }, 1.4f, true);
+            }
+        }
 
         // Ports: the faction glyph (the same drawing as the sea chart's) and the name, haloed so it reads over the lines.
         var body = Fonts.Body;
@@ -669,14 +735,47 @@ public partial class ChartMap : Control
             ChartView.DrawFactionMark(this, Vector2.Zero, port.Faction, port.Fort, port.Secret);
         }
         DrawSetTransform(-c.View.Position);
-        var placed = PlaceNames(body, 15);
+
+        // Every label goes where it covers least: other lettering, glyphs, the ship and pins most; then land (a name
+        // reads best on open water, beside its coast); then the faint region names.
+        var it = Fonts.Italic;
+        var taken = new List<Rect2> { new(ShipAt() - new Vector2(16, 16), new Vector2(32, 32)) };
+        foreach (var pin in World.Pins)
+        {
+            var pp = c.ToScreen(pin.Pos);
+            float nw = pin.Note.Length > 0 ? it.GetStringSize(pin.Note, HorizontalAlignment.Left, -1, 16).X + 8 : 0;
+            taken.Add(new Rect2(pp + new Vector2(-5, -20), new Vector2(12 + nw, 22)));
+        }
+        var faint = new List<Rect2>();
+        foreach (var (pos, name) in regionNames)
+        {
+            var sz = regionFont.GetStringSize(name, HorizontalAlignment.Left, -1, rsize);
+            var at = c.ToScreen(pos) + new Vector2(-sz.X / 2, sz.Y * 0.3f);
+            faint.Add(new Rect2(at - new Vector2(0, sz.Y * 0.8f), new Vector2(sz.X, sz.Y * 0.8f)));
+        }
+        var land = shown.Select(i => (c.ToScreen(i.Centre), (float)i.BoundRadius * s * 0.75f)).ToList();
+        var placed = PlaceNames(body, 15, taken, faint, land);
         foreach (var (port, at) in placed)
             DrawStringOutline(body, at, port.Name, HorizontalAlignment.Left, -1, 15, 5, Ink.Paper with { A = 0.85f });
         foreach (var (port, at) in placed)
             DrawString(body, at, port.Name, HorizontalAlignment.Left, -1, 15, port.Secret ? Ink.Red : Ink.Black);
 
+        // Deliveries due: a red double ring round the port and the day she must make it by, set clear of the names.
+        foreach (var contract in World.Player.Contracts)
+        {
+            var p = c.ToScreen(World.Map.Ports[contract.To].Pos);
+            DrawArc(p, 12, 0, Mathf.Tau, 28, Ink.Red, 1.6f, true);
+            DrawArc(p, 16, 0, Mathf.Tau, 32, Ink.Red with { A = 0.7f }, 1.2f, true);
+            string due = Text.Get("CHART_CONTRACT_DUE", Parchment.DayWatch(contract.Deadline));
+            var sz = it.GetStringSize(due, HorizontalAlignment.Left, -1, 15);
+            Vector2[] at = { p + new Vector2(-sz.X / 2, 34), p + new Vector2(-sz.X / 2, -22), p + new Vector2(20, 22), p + new Vector2(-20 - sz.X, 22) };
+            var best = Best(at, sz, 0, taken, faint, land);
+            taken.Add(LabelRect(best, sz));
+            DrawStringOutline(it, best, due, HorizontalAlignment.Left, -1, 15, 5, Ink.Paper with { A = 0.9f });
+            DrawString(it, best, due, HorizontalAlignment.Left, -1, 15, Ink.Red);
+        }
+
         // Rumour marks and pin notes (italic).
-        var it = Fonts.Italic;
         foreach (var hint in World.Player.CoveHints)
             DrawString(Fonts.DisplayItalic, c.ToScreen(new Vec2(hint.X, hint.Y)) + new Vector2(-8, 12), "?", HorizontalAlignment.Left, -1, 34, Ink.Red);
         var pinLines = new List<Vector2>();
@@ -697,9 +796,17 @@ public partial class ChartMap : Control
             }
         }
 
-        // The ship, and how far she sees.
+        // The ship, and how far she sees. Off the chart she is marked at its edge, with a red line out toward her.
         var ship = World.Ship;
-        var at2 = c.ToScreen(ship.Pos);
+        var at2 = ShipAt();
+        if (Map.BeyondEdge(ship.Pos) > 0)
+        {
+            var edge = c.ToScreen(new Vec2(Math.Clamp(ship.Pos.X, -Map.HalfW, Map.HalfW), Math.Clamp(ship.Pos.Y, -Map.HalfH, Map.HalfH)));
+            var outward = (at2 - edge).Normalized();
+            for (int k = 0; k < 4; k++)
+                DrawLine(edge + outward * (6 + k * 9), edge + outward * (10 + k * 9), Ink.Red, 2f, true);
+            at2 = edge - outward * 10;
+        }
         DrawArc(at2, (float)World.VisionRadius * s, 0, Mathf.Tau, 64, Ink.Red with { A = 0.55f }, 1.2f, true);
         var h = new Vector2(Mathf.Cos((float)ship.Heading), Mathf.Sin((float)ship.Heading));
         var n = new Vector2(-h.Y, h.X);
@@ -711,11 +818,43 @@ public partial class ChartMap : Control
 
     static Vector2 Vec(float a) => new(Mathf.Cos(a), Mathf.Sin(a));
 
-    /// <summary>Each port's name goes right, left, above or below its glyph, whichever overlaps the names already set least.</summary>
-    List<(Port Port, Vector2 At)> PlaceNames(Font font, int size)
+    Vector2 ShipAt() => Canvas.ToScreen(World.Ship.Pos);
+
+    static Rect2 LabelRect(Vector2 baseline, Vector2 size) => new(baseline - new Vector2(0, size.Y * 0.75f), new Vector2(size.X, size.Y * 0.85f));
+
+    /// <summary>
+    /// The candidate baseline whose label covers least, in order of preference: lettering, glyphs, the ship and pins
+    /// cost most, then land (by how deep into the island's core it reaches), then the faint region names.
+    /// </summary>
+    Vector2 Best(Vector2[] at, Vector2 size, int preferred, List<Rect2> taken, List<Rect2> faint, List<(Vector2 C, float R)> land)
+    {
+        var view = Canvas.View.Grow(-3);
+        Vector2 best = at[0];
+        float bestScore = float.MaxValue;
+        for (int i = 0; i < at.Length; i++)
+        {
+            var r = LabelRect(at[i], size);
+            float score = i < preferred ? i * 0.5f : preferred * 0.5f + 1.5f + (i - preferred) * 0.25f;
+            if (!view.Encloses(r)) score += 50;
+            foreach (var t in taken)
+                if (t.Intersects(r)) score += t.Intersection(r).Area / 25f + 4;
+            foreach (var f in faint)
+                if (f.Intersects(r)) score += f.Intersection(r).Area / 300f + 0.5f;
+            foreach (var (cc, rr) in land)
+            {
+                var q = new Vector2(Mathf.Clamp(cc.X, r.Position.X, r.End.X), Mathf.Clamp(cc.Y, r.Position.Y, r.End.Y));
+                float d = q.DistanceTo(cc);
+                if (d < rr) score += 1.5f + (rr - d) / 6f;
+            }
+            if (score < bestScore) { bestScore = score; best = at[i]; }
+        }
+        return best;
+    }
+
+    /// <summary>Each port's name goes beside its glyph (right, left, above, below, then the four corners), wherever it covers least.</summary>
+    List<(Port Port, Vector2 At)> PlaceNames(Font font, int size, List<Rect2> taken, List<Rect2> faint, List<(Vector2 C, float R)> land)
     {
         var c = Canvas;
-        var taken = new List<Rect2>();
         var result = new List<(Port, Vector2)>();
         var ports = World.Map.Ports.Where(c.Shown).ToList();
         foreach (var port in ports) taken.Add(new Rect2(c.ToScreen(port.Pos) - new Vector2(9, 12), new Vector2(18, 20)));
@@ -723,19 +862,13 @@ public partial class ChartMap : Control
         {
             var p = c.ToScreen(port.Pos);
             var sz = font.GetStringSize(port.Name, HorizontalAlignment.Left, -1, size);
-            Vector2[] at = { p + new Vector2(11, -6), p + new Vector2(-11 - sz.X, -6), p + new Vector2(-sz.X / 2, -16), p + new Vector2(-sz.X / 2, 24) };
-            Vector2 best = at[0];
-            float bestScore = float.MaxValue;
-            for (int i = 0; i < at.Length; i++)
+            Vector2[] at =
             {
-                var r = new Rect2(at[i] - new Vector2(0, sz.Y * 0.75f), sz);
-                float score = i * 0.5f;
-                if (!c.View.Encloses(r)) score += 50;
-                foreach (var t in taken)
-                    if (t.Intersects(r)) score += t.Intersection(r).Area / 40f + 2;
-                if (score < bestScore) { bestScore = score; best = at[i]; }
-            }
-            taken.Add(new Rect2(best - new Vector2(0, sz.Y * 0.75f), sz));
+                p + new Vector2(11, -6), p + new Vector2(-11 - sz.X, -6), p + new Vector2(-sz.X / 2, -16), p + new Vector2(-sz.X / 2, 24),
+                p + new Vector2(8, -15), p + new Vector2(8, 20), p + new Vector2(-8 - sz.X, -15), p + new Vector2(-8 - sz.X, 20),
+            };
+            var best = Best(at, sz, 4, taken, faint, land);
+            taken.Add(LabelRect(best, sz));
             result.Add((port, best));
         }
         return result;
@@ -781,6 +914,8 @@ public partial class ChartOverlay : Control
         if (buys.Length > 0) lines.Add((Text.Get("CHART_BUYS", buys), Fonts.Body, 17, Ink.Black));
         if (lastDay >= 0) lines.Add((Text.Get(rumour ? "CHART_HEARD" : "CHART_SEEN", Math.Floor(lastDay) + 1), Fonts.Italic, 16, Parchment.Muted));
         else lines.Add((Text.Get("CHART_NO_PRICES"), Fonts.Italic, 16, Parchment.Muted));
+        foreach (var contract in w.Player.Contracts.Where(k => k.To == hp.Id))
+            lines.Add((Text.Get("PORT_CONTRACT_LINE", Text.Get("CONTRACT_" + ContractDef.Of(contract.Kind).Key), hp.Name, Parchment.DayWatch(contract.Deadline)), Fonts.Italic, 16, Ink.Red));
 
         float width = 0, height = 18;
         foreach (var l in lines)
@@ -831,6 +966,7 @@ public partial class ChartKey : Control
             ("CHART_KEY_RUMOUR", p => { for (int k = 0; k < 12; k += 2) DrawArc(p, 8, k * Mathf.Tau / 12, (k + 1) * Mathf.Tau / 12, 4, Ink.Red, 1.4f); }),
             ("CHART_KEY_WRECK", p => { DrawLine(p + new Vector2(-6, 4), p + new Vector2(6, 4), Ink.Black, 1.8f); DrawLine(p + new Vector2(-1, 4), p + new Vector2(-3, -7), Ink.Black, 1.8f); }),
             ("CHART_KEY_PIN", p => { DrawLine(p + new Vector2(0, 7), p + new Vector2(0, -5), Ink.Red, 2f); DrawCircle(p + new Vector2(0, -6), 3.5f, Ink.Red); }),
+            ("CHART_KEY_CONTRACT", p => { DrawArc(p, 5, 0, Mathf.Tau, 16, Ink.Red, 1.4f, true); DrawArc(p, 8.5f, 0, Mathf.Tau, 20, Ink.Red with { A = 0.7f }, 1.1f, true); }),
             ("CHART_KEY_SHIP", p => DrawColoredPolygon(new[] { p + new Vector2(10, 0), p + new Vector2(2, 5), p + new Vector2(-7, 4), p + new Vector2(-7, -4), p + new Vector2(2, -5) }, Ink.Red)),
         };
         foreach (var (key, glyph) in items)
@@ -858,7 +994,7 @@ public partial class ChartKey : Control
         for (int k = 0; k < 4; k++)
             if (k % 2 == 0) DrawRect(new Rect2(bar.Position.X + len * k / 4, bar.Position.Y, len / 4, bar.Size.Y), Ink.Black);
         DrawRect(bar, Ink.Black, false, 1.2f);
-        string Num(float v) => v switch { 0.25f => "¼", 0.5f => "½", 0.75f => "¾", 1.5f => "1½", _ => v.ToString(System.Globalization.CultureInfo.InvariantCulture) };
+        string Num(float v) => v switch { 0.125f => "⅛", 0.25f => "¼", 0.5f => "½", 0.75f => "¾", 1.5f => "1½", _ => v.ToString(System.Globalization.CultureInfo.InvariantCulture) };
         for (int k = 0; k <= 2; k++)
         {
             float v = unit * k / 2;
@@ -875,6 +1011,41 @@ public partial class ChartKey : Control
         DrawSetTransform(p, 0, Vector2.One * 0.75f);
         ChartView.DrawFactionMark(this, Vector2.Zero, f, fort, secret);
         DrawSetTransform(Vector2.Zero);
+    }
+}
+
+/// <summary>How to work the chart, down the right margin opposite the key, lettered like the options' key list.</summary>
+public partial class ChartControls : Control
+{
+    public bool Small;
+    public ChartControls() { MouseFilter = MouseFilterEnum.Ignore; }
+
+    static readonly (string Word, string Keys)[] Rows =
+    {
+        ("CHART_DO_CLOSE", "CHART_KEYS_CLOSE"), ("CHART_DO_PIN", "CHART_KEYS_PIN"), ("CHART_DO_UNPIN", "CHART_KEYS_UNPIN"),
+        ("CHART_DO_ZOOM", "CHART_KEYS_ZOOM"), ("CHART_DO_PAN", "CHART_KEYS_PAN"), ("CHART_DO_CENTRE", "CHART_KEYS_CENTRE"),
+    };
+
+    float RowH => Small ? 23 : 28;
+    public float Needed => 36 + RowH * Rows.Length;
+
+    public override void _Draw()
+    {
+        int size = Small ? 14 : 16;
+        DrawString(Fonts.SmallCaps, new Vector2(0, 20), Text.Get("CHART_USE"), HorizontalAlignment.Left, -1, Small ? 17 : 20, Ink.Black);
+        DrawLine(new Vector2(0, 28), new Vector2(Mathf.Min(Size.X, 170), 28), Ink.Black with { A = 0.6f }, 1f);
+        float y = 30 + RowH * 0.85f;
+        foreach (var (word, keys) in Rows)
+        {
+            string w = Text.Get(word), k = Text.Get(keys);   // [[Chart]] follows the bindings
+            float ww = Fonts.Italic.GetStringSize(w, HorizontalAlignment.Left, -1, size).X;
+            float kw = Fonts.SmallCaps.GetStringSize(k, HorizontalAlignment.Left, -1, size).X;
+            DrawString(Fonts.Italic, new Vector2(0, y), w, HorizontalAlignment.Left, -1, size, Ink.Black with { A = 0.85f });
+            DrawString(Fonts.SmallCaps, new Vector2(Size.X - kw, y), k, HorizontalAlignment.Left, -1, size, Ink.Black);
+            for (float x = ww + 7; x < Size.X - kw - 6; x += 6)
+                DrawRect(new Rect2(x, y - 2, 1.4f, 1.4f), Ink.Black with { A = 0.4f });
+            y += RowH;
+        }
     }
 }
 

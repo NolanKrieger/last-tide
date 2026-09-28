@@ -88,8 +88,9 @@ public class EconomyTests
         double free = w.Ship.CargoCapacity - w.Player.SlotsUsed;
         while (units < 20 && start.Market.QuoteBuy(good, units + 1) <= gold && (units + 1) * Goods.Of(good).SlotsPerUnit <= free + 1e-9) units++;
         Assert.True(units > 0);
+        int held = w.Player.Units(good);   // the start's own produce may already be aboard (provisions)
         Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.Buy, good, units)));
-        Assert.True(w.Player.Gold < gold && w.Player.Units(good) == units);
+        Assert.True(w.Player.Gold < gold && w.Player.Units(good) == held + units);
         Assert.True(start.Market.Price(good) > buyPrice, "buying pushes the price up");
         Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.CastOff)));
 

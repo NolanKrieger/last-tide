@@ -1,14 +1,15 @@
 namespace LastTide.Sim;
 
 public enum PortAction { Dock, CastOff, Buy, Sell, Repair, Hire, Rumor, BuyCannon, SellCannon, BuyHull, BuyPart, HireOfficer, DismissOfficer, BuyUnique, BuyMap,
-    CrewOrder, CrewStations }   // the crew panel: at sea or in port, logged so replays see it
+    CrewOrder, CrewStations,    // the crew panel: at sea or in port, logged so replays see it
+    SignContract, AbandonContract }   // the harbour office: Amount is the board slot / the contract's index
 
 /// <summary>An action taken in port (GDD §13). Logged with its tick so a run replays. <see cref="Text"/> carries a hull id.</summary>
 public readonly record struct PortCommand(PortAction Action, Good Good = Good.Provisions, int Amount = 0, string Text = "");
 
 public readonly record struct CommandEntry(long Tick, PortCommand Command);
 
-public enum PortResult { Ok, NotInHarbor, PortClosed, NotDocked, NoGold, NoRoom, NoStock, NoCargo, CrewFull, Nothing, NotSold }
+public enum PortResult { Ok, NotInHarbor, PortClosed, NotDocked, NoGold, NoRoom, NoStock, NoCargo, CrewFull, Nothing, NotSold, Busy }
 
 public sealed partial class World
 {
@@ -16,7 +17,7 @@ public sealed partial class World
     public const int SigningFee = 10;
     public const int CannonPrice = 80;
     public const int TornSailRepair = 25;
-    public static readonly int[] StationWage = { 3, 2, 4, 2 };   // guns, sails, repair, pumps (GDD §6)
+    public static readonly int[] StationWage = { 3, 2, 4, 2 };   // guns, sails, repair, spare hands (GDD §6)
 
     public Port? Docked { get; private set; }
     public bool IsDocked => Docked != null;
@@ -34,7 +35,7 @@ public sealed partial class World
 
     public double RepairCostPerHp => 1.5 * Math.Sqrt(Ship.Hull.HullHp / 100.0);
 
-    /// <summary>Crew per station under the current order: guns, sails, repair, pumps (GDD §7).</summary>
+    /// <summary>Crew per station under the current order: guns, sails, repair, spare hands (GDD §7).</summary>
     public int[] Stations() => Ship.Stations();
 
     public int DailyWages()
@@ -90,8 +91,10 @@ public sealed partial class World
                     tradedThisVisit = false;
                     port.PricesLastVisit = Goods.All.Select(g => Player.Remembered(port.Id, g.Id)?.Price).ToArray();
                 }
-                port.Discovered = true;
-                Player.PortsVisited.Add(port.Id);
+                // Tying up marks the port on the chart only with a cartographer aboard (nothing new is inked without
+                // one); the purser's ledger of prices below is kept either way.
+                if (HasCartographer) port.Discovered = true;
+                bool firstVisit = Player.PortsVisited.Add(port.Id);
                 foreach (var g in Goods.All)
                     Player.Remember(port.Id, g.Id, port.Market.Price(g.Id), DaysSurvived, false);
                 if (Player.Unpaid)
@@ -111,6 +114,7 @@ public sealed partial class World
                     }
                     Player.Unpaid = false;
                 }
+                Arrive(port, firstVisit);
                 Ship.Vel = Vec2.Zero;
                 Ship.AngVel = 0;
                 OnDocked?.Invoke(port);
@@ -228,6 +232,8 @@ public sealed partial class World
             case PortAction.BuyHull: return BuyHull(cmd.Text);
             case PortAction.BuyUnique: return BuyUnique(cmd.Text);
             case PortAction.BuyMap: return BuyBottleMap();
+            case PortAction.SignContract: return SignContract(cmd.Amount);
+            case PortAction.AbandonContract: return AbandonContract(cmd.Amount);
             case PortAction.BuyPart: return cmd.Amount >= 0 && cmd.Amount < PartDef.All.Length ? BuyPart((Part)cmd.Amount) : PortResult.Nothing;
             case PortAction.HireOfficer: return HireOfficer(cmd.Amount / 10, cmd.Amount % 10);
             case PortAction.DismissOfficer: return DismissOfficer(cmd.Amount);

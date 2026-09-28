@@ -34,7 +34,6 @@ public class ExplorationTests
         Assert.Equal(0.3, w.StealthBonus, 6);
         Assert.Equal(Hulls.Sloop.PointDeg * 0.95, w.Ship.PointDeg, 6);
         Assert.Equal(220, w.Ship.Range, 6);
-        Assert.Equal(1.5, w.Ship.PumpMult, 6);
         Assert.Equal(23, w.Ship.CargoCapacity);
         Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.BuyHull, Text: "cutter")));
         Assert.Equal(220, w.Ship.Range, 6);   // uniques move with the captain

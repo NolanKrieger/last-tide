@@ -33,16 +33,27 @@ public partial class ShipView : Node2D
     int listSide = 1;
     Color hullPaint = Ink.Hull, sailColor = Ink.Sail;
     bool striped;
-    Texture2D? hullTex;
+    Texture2D? hullTex, shadowTex;
+    Vector2 shadowPad;
     float artAspect = 3.2f;
     RigPlan plan = null!;
+    /// <summary>Heel under sail, signed toward the lee side (+ starboard): the mastheads lean with the pressure.</summary>
+    float heel;
 
     // The sails' own trim, eased toward the apparent wind so they swing rather than pop.
     float boomDeg, braceDeg, fill = 1f, luff, awOff = 90f, awSpeed = 8f;
     Vector2 awLocal = new(-1, 0);
     bool trimReady;
 
-    static readonly InkBatch over = new();
+    static readonly InkBatch over = new(), rig = new(), cast = new();
+
+    /// <summary>How strongly the sun casts shadows: 1 by day, 0 at night, faint in fog and rain (set by the weather each frame).</summary>
+    public static float Sunlight = 1f;
+    /// <summary>Shadows fall to the south-east, lit from the north-west as the gulls are.</summary>
+    static readonly Vector2 ShadowDir = new Vector2(7, 9).Normalized();
+    static readonly Color ShadowInk = new(0.13f, 0.14f, 0.17f);
+    /// <summary>The shadow direction in her own frame (unit), refreshed every draw.</summary>
+    Vector2 shadowLocal = new(0, 1);
 
     /// <summary>Every ship view in the tree (the player's and the fleet's), for the night lanterns.</summary>
     public static readonly List<ShipView> Live = new();
@@ -96,10 +107,12 @@ public partial class ShipView : Node2D
         LastPos = s.Pos;
         LastHeading = s.Heading;
         plan = PlanFor(s.Hull);
-        bool cosmeticHull = s.IsPlayer && loadout[3].Length > 0;
-        hullPaint = cosmeticHull ? Cosmetic.Hull(loadout[3]) : s.IsPlayer ? Ink.Hull : ShipArt.FactionPaint(s.Faction);
-        hullTex = ShipArt.Painted(s.Hull.Id, hullPaint);
-        artAspect = hullTex != null ? ShipArt.Aspect(s.Hull.Id) : (float)(s.Hull.Length / s.Hull.Beam);
+        var livery = ShipArt.For(s.Hull, s.IsPlayer, s.Faction, loadout[3]);
+        hullPaint = livery.Topsides;
+        hullTex = ShipArt.Dressed(s.Hull.Id, livery);
+        (shadowTex, shadowPad) = ShipArt.Shadow(s.Hull.Id);
+        heel = 0;
+        artAspect = hullTex != null ? hullTex.GetWidth() / (float)Math.Max(1, hullTex.GetHeight()) : (float)(s.Hull.Length / s.Hull.Beam);
         sailColor = s.IsPlayer ? Cosmetic.Sail(loadout[1]) : s.Faction switch
         {
             Faction.Crown => new Color(0.98f, 0.97f, 0.93f),
@@ -168,19 +181,28 @@ public partial class ShipView : Node2D
         var shift = new Vector2(0, listSide * B * 0.08f * list);
         if (list > 0) DrawSetTransform(shift, 0, new Vector2(1, squash));
 
-        DrawHull(L, B, px, cut);
+        shadowLocal = ShadowDir.Rotated(-GetGlobalTransform().Rotation);
+        float sun = Sunlight * (1 - under);
+        DrawHull(L, B, px, cut, sun);
 
+        // Water and hull marks first, then the shadow the rig casts across them, then the rig.
         over.Clear();
         over.Px = px / Mathf.Max(0.5f, squash);
         if (sinkT < 0) { BowWave(over, L, B); DamageMarks(over, L, B); }
-        DrawRig(over, L, B, px, cut, list);
-        if (sinkT < 0 && ship.IsPlayer && loadout[2].Length > 0) Figurehead(over, new Vector2(L * 0.5f, 0), loadout[2], B);
-        if (under > 0.02f && under < 0.99f) Churn(over, cut, B);
+        rig.Clear();
+        rig.Px = over.Px;
+        cast.Clear();
+        cast.Px = over.Px;
+        DrawRig(rig, L, B, px, cut, list);
+        if (sinkT < 0 && ship.IsPlayer && loadout[2].Length > 0) Figurehead(rig, new Vector2(L * 0.5f, 0), loadout[2], B);
+        if (sun > 0.01f) over.AppendShadow(cast, shadowLocal * (B * 0.5f + L * 0.03f), ShadowInk with { A = 0.15f * sun });
+        if (under > 0.02f && under < 0.99f) Churn(rig, cut, B);
         over.Flush(this);
+        rig.Flush(this);
         if (list > 0) DrawSetTransform(Vector2.Zero, 0, Vector2.One);
     }
 
-    void DrawHull(float L, float B, float px, float cut)
+    void DrawHull(float L, float B, float px, float cut, float sun)
     {
         var rect = new Rect2(-L / 2, -B / 2, L, B);
         if (hullTex != null)
@@ -190,9 +212,28 @@ public partial class ShipView : Node2D
             if (u0 >= 1) return;
             var src = new Rect2(u0 * tw, 0, (1 - u0) * tw, th);
             var dst = new Rect2(-L / 2 + u0 * L, -B / 2, (1 - u0) * L, B);
-            // The water she sits in: a soft blue-grey wash just outside the hull, so she lifts off the paper.
-            var wash = new Rect2(dst.Position - new Vector2(B * 0.09f, B * 0.10f), dst.Size + new Vector2(B * 0.18f, B * 0.20f));
-            DrawTextureRectRegion(hullTex, wash, src, new Color(0.22f, 0.36f, 0.5f, 0.07f));
+            if (shadowTex != null)
+            {
+                var pad = new Vector2(shadowPad.X * L, shadowPad.Y * B);
+                var soft = new Rect2(-L / 2 - pad.X, -B / 2 - pad.Y, L + 2 * pad.X, B + 2 * pad.Y);
+                // Her shadow on the water, cast from the north-west, and the darker water right at her sides.
+                if (sun > 0.01f) DrawTextureRect(shadowTex, soft with { Position = soft.Position + shadowLocal * (B * 0.16f) }, false, ShadowInk with { A = 0.34f * sun });
+                DrawTextureRect(shadowTex, soft.Grow(B * 0.04f), false, new Color(0.20f, 0.33f, 0.46f, 0.13f * (1 - Mathf.Clamp((cut + L / 2) / L, 0, 1))));
+                // A lip of white water along her sides that grows with her speed, pushed out ahead by the bow.
+                float k = Mathf.Clamp(((float)ship.ForwardSpeed - 1f) / 8f, 0, 1);
+                if (k > 0.01f && sinkT < 0)
+                {
+                    var lip = soft.Grow(B * 0.03f);
+                    lip = lip with { Position = lip.Position + new Vector2(L * 0.015f, -B * 0.07f * k), Size = lip.Size + new Vector2(L * 0.02f, B * 0.14f * k) };
+                    DrawTextureRect(shadowTex, lip, false, new Color(0.99f, 0.98f, 0.95f, 0.55f * k));
+                }
+            }
+            else
+            {
+                // The water she sits in: a soft blue-grey wash just outside the hull, so she lifts off the paper.
+                var wash = new Rect2(dst.Position - new Vector2(B * 0.09f, B * 0.10f), dst.Size + new Vector2(B * 0.18f, B * 0.20f));
+                DrawTextureRectRegion(hullTex, wash, src, new Color(0.22f, 0.36f, 0.5f, 0.07f));
+            }
             DrawTextureRectRegion(hullTex, dst, src);
             float wet = (float)Math.Clamp((ship.Water - 5) / 95.0, 0, 1);
             if (ship.Foundering) wet = Mathf.Max(wet, 0.55f + 0.1f * Mathf.Sin(time * 2.1f));

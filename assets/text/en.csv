@@ -61,13 +61,42 @@ REGION_mangrove,Mangrove Maze
 REGION_volcanic,Volcanic Isles
 REGION_sargasso,Sargasso Weed Sea
 REGION_siren_ruins,Siren's Ruins
+REGION_ice_reach,The Ice Reach
+REGION_maelstrom,Maelstrom Straits
+REGION_corsair_keys,Corsair Keys
+REGION_IN_trade_isles,the Trade Isles
+REGION_IN_shoals,the Shoals
+REGION_IN_deep,the Deep
+REGION_IN_fog_banks,the Fog Banks
+REGION_IN_storm_reach,Storm Reach
+REGION_IN_mangrove,the Mangrove Maze
+REGION_IN_volcanic,the Volcanic Isles
+REGION_IN_sargasso,the Sargasso Weed Sea
+REGION_IN_siren_ruins,Siren's Ruins
+REGION_IN_ice_reach,the Ice Reach
+REGION_IN_maelstrom,the Maelstrom Straits
+REGION_IN_corsair_keys,the Corsair Keys
+SEA_BEYOND_CHART,Here Be Monsters
+REGION_beyond,Uncharted waters
 FACTION_crown,The Crown
 FACTION_freetraders,Free Traders
 FACTION_brethren,The Brethren
 CHART_TITLE,The Chart
-CHART_HINT,"[[Chart]] or Esc closes · click drops an ink pin, Enter keeps it · right-click a pin removes it · wheel or + / − zooms · right-drag or the arrows pan"
+CHART_USE,Using the chart
+CHART_DO_CLOSE,Close
+CHART_KEYS_CLOSE,[[Chart]] · Esc
+CHART_DO_PIN,Drop an ink pin
+CHART_KEYS_PIN,Click
+CHART_DO_UNPIN,Lift a pin
+CHART_KEYS_UNPIN,Right-click
+CHART_DO_ZOOM,Zoom
+CHART_KEYS_ZOOM,Wheel · + −
+CHART_DO_PAN,Pan
+CHART_KEYS_PAN,Right-drag · Arrows
+CHART_DO_CENTRE,Centre on the ship
+CHART_KEYS_CENTRE,Space
 CHART_NO_PRICES,No prices seen yet
-CHART_PIN_PROMPT,Note for this pin
+CHART_PIN_PROMPT,Note for this pin · Enter keeps it
 CHART_PORT,"{0} · {1}"
 CHART_COVE,Secret cove
 CHART_SUBTITLE,"inked aboard the {0} · {1} · {2}% of the sea charted"
@@ -183,14 +212,14 @@ HUD_GAUGE_WATER,water
 HUD_GUN_Q,[[FirePort]]
 HUD_GUN_E,[[FireStarboard]]
 HUD_MUNITIONS,"{0} shot · {1} guns"
-HUD_ORDER,"{0} · guns {1} · sails {2} · repair {3} · pumps {4}"
+HUD_ORDER,"{0} · guns {1} · sails {2} · repair {3} · spare {4}"
 ORDER_BATTLE,[[Order1]] Battle stations
 ORDER_MAKESAIL,[[Order2]] Make sail
-ORDER_REPAIR,[[Order3]] Repair & pump
+ORDER_REPAIR,[[Order3]] Repair
 ORDER_BALANCED,[[Order4]] Balanced
 HUD_LAST_STAND,"LAST STAND · {0}"
 HUD_LAST_STAND_HULL,"She is foundering. Reach any open harbour before the glass runs out."
-HUD_LAST_STAND_WATER,"Water at the gunwales. Pump her below 80% or reach a harbour."
+HUD_LAST_STAND_WATER,"Water at the gunwales. Patch her above 60% hull to drain her below 80%, or reach a harbour."
 HUD_SUNK,"SUNK · Day {0}"
 NOTICE_BY_A_HAIR,"By a hair! The harbour took her in with one point of hull left."
 TIER_flat_calm,Flat Calm
@@ -205,6 +234,7 @@ TIER_last_tide,LAST TIDE
 NOTICE_SAIL_SIGHTED,"Sail ho! A hostile sail on the horizon."
 NOTICE_HUNTERS,"Hunters! Privateers with your name on a bounty."
 WX_STORM,Storm
+WX_WHIRLPOOL,Whirlpool
 WX_FOG,Fog
 WX_DOLDRUMS,Doldrums
 WX_ASH,Ash fall
@@ -228,7 +258,7 @@ NOTICE_MONSTER_ghost_ship,"A lantern in the fog where no ship should be."
 NOTICE_MONSTER_crocodile,"Eyes in the mangrove roots."
 NOTICE_MONSTER_weed_kraken,"The weed is moving on its own."
 NOTICE_MONSTER_siren,"A song from the rocks. Hold your course."
-NOTICE_KRAKEN_GRIP,"The Kraken has her! Shoot the tentacles; carpenters and pumps to it."
+NOTICE_KRAKEN_GRIP,"The Kraken has her! Shoot the tentacles; carpenters to it."
 NOTICE_WEED_GRIP,"Weed round the hull, dragging her down! Cut it or shoot it."
 NOTICE_RUDDER_JAMMED,"The crocodile's bite has jammed the rudder!"
 NOTICE_ERUPTION,"The mountain rumbles. Watch the marked water."
@@ -247,6 +277,8 @@ SUNK_CROCODILE,"Lost to the Giant Crocodile"
 SUNK_WEEDKRAKEN,"Swallowed by the Weed-Kraken"
 SUNK_SIREN,"Wrecked on the Siren's rocks"
 SUNK_ERUPTION,"Buried by the mountain's rocks"
+SUNK_WHIRLPOOL,Dragged down by a whirlpool
+SUNK_ICE,Stove in by the drift ice
 SUNK_GUNS,"Shot to pieces"
 SUNK_WATER,"Foundered"
 SUNK_SEA,"Lost at sea"
@@ -273,13 +305,11 @@ PART_rigging_EFFECT,"points 3° closer to the wind a grade"
 PART_planking,Hull planking
 PART_planking_EFFECT,"+12% hull a grade, −1.5% speed"
 PART_copper,Copper sheathing
-PART_copper_EFFECT,"+2% speed; each hit 12% likelier to open no leak, a grade"
+PART_copper_EFFECT,"+2% speed, and 12% fewer leaks from hits, a grade"
 PART_cannons,Cannons
 PART_cannons_EFFECT,"heavier shot: +28 m range, +2 damage, +2 s reload a grade"
 PART_ram,Ram prow
 PART_ram_EFFECT,"+25% ram damage, −12% self-damage a grade"
-PART_pumps,Pumps
-PART_pumps_EFFECT,"+30% pumping a grade"
 PART_hold,Hold
 PART_hold_EFFECT,"+10% cargo a grade"
 PART_lantern,Lantern & spyglass
@@ -288,7 +318,7 @@ PORT_OFFICERS,"Officers aboard {0} of {1} berths"
 PORT_OFFICER_LINE,"{0} ({1}) · {2} gold, {3} a day · {4} · {5}"
 PORT_OFFICER_NONE,none aboard
 PORT_OFFICER_HAVE,"aboard: {0}"
-PORT_OFFICER_HIRE,"Hire · {0}"
+PORT_OFFICER_HIRE,"Hire · {0} gold"
 PORT_DISMISS,Dismiss
 OFFICER_lookout,Lookout
 OFFICER_marines,Marines
@@ -302,28 +332,37 @@ OFFICER_marines_EFFECT_2,"a volley every 6 s within 120 m kills 3 hands"
 OFFICER_quartermaster_EFFECT_0,"prices 3% better, wages −10%, provisions last +15%"
 OFFICER_quartermaster_EFFECT_1,"prices 6% better, wages −20%, provisions last +30%"
 OFFICER_quartermaster_EFFECT_2,"prices 10% better, wages −30%, provisions last +50%"
+OFFICER_cartographer,Cartographer
+OFFICER_cartographer_EFFECT_0,"keeps the chart out to the edge of sight; without one the chart stays shut · own berth, no officer slot"
+OFFICER_cartographer_EFFECT_1,"keeps the chart 25% beyond sight · own berth, no officer slot"
+OFFICER_cartographer_EFFECT_2,"keeps the chart 50% beyond sight · own berth, no officer slot"
 TIER_green,green
 TIER_seasoned,seasoned
 TIER_legendary,legendary
 NOTICE_OFFICERS_LEFT,"The officers walked off unpaid."
 NOTICE_OFFICERS_ASHORE,"No berth aboard the new hull: the last officers hired went ashore."
+NOTICE_NO_CARTOGRAPHER,"No cartographer aboard: hire one at a tavern to keep a chart."
 ACHIEVEMENT_galleon_captain,"Achievement: Galleon Captain"
 ACHIEVEMENT_ship_of_the_line,"Achievement: Ship of the Line"
 CREW_TITLE,"Crew {0} of {1} · {2}"
-CREW_NOTE,"Hands not at a station work the pumps. Guns need one hand each, sails the hull's riggers, repair one per 100 hull. Orders [[Order1]]–[[Order4]] reset the split."
+CREW_NOTE,"Hands not at a station stand spare. Guns need one hand each, sails the hull's riggers, repair one per 100 hull. Orders [[Order1]]–[[Order4]] reset the split."
 CREW_HEAD,"Crew · {0} of {1}"
 CREW_CLOSE,[[Crew]] or Esc closes
 CREW_WAGES,"wages {0} gold a day · {1} provisions a day"
+CREW_OFFICERS,"Officers: {0}"
+CREW_OFFICERS_NONE,"Officers: none aboard"
+CREW_OFFICER_ITEM,"{0} ({1})"
+CREW_NO_CARTOGRAPHER,"No cartographer aboard: nothing new goes on the chart, and it stays shut. Hire one at a tavern."
 STATION_GUNS_NAME,Guns
 STATION_SAILS_NAME,Sails
 STATION_REPAIR_NAME,Repair
-STATION_PUMPS_NAME,Pumps
+STATION_SPARE_NAME,Spare hands
 STATION_COUNT,"{0} of {1} needed"
 STATION_REST,"{0} · everyone else"
 STATION_GUNS,"Guns {0} (need {1})"
 STATION_SAILS,"Sails {0} (need {1})"
 STATION_REPAIR,"Repair {0} (need {1})"
-STATION_PUMPS,"Pumps {0}"
+STATION_SPARE,"Spare {0}"
 ORDER_CUSTOM,Custom
 HUD_HINTS,"[[SailUp]] / [[SailDown]] sail · [[Port]] / [[Starboard]] helm · [[FirePort]] / [[FireStarboard]] broadsides · RMB spyglass · [[Order1]]–[[Order4]] / [[Crew]] crew · [[Lantern]] lantern · [[Dock]] dock · [[Chart]] chart · Esc pause"
 PORT_BLACK_MARKET,Black market
@@ -335,18 +374,18 @@ UNIQUE_smugglers_keel,Smuggler's keel
 UNIQUE_smugglers_keel_EFFECT,"points 5% closer to the wind"
 UNIQUE_long_nines,Long nines
 UNIQUE_long_nines_EFFECT,"+40 m to every gun"
-UNIQUE_bilge_engine,Bilge engine
-UNIQUE_bilge_engine_EFFECT,"pumps work half again as hard"
 UNIQUE_hidden_hold,Hidden hold
 UNIQUE_hidden_hold_EFFECT,"+15% cargo"
 UNIQUE_false_colours,False colours
 UNIQUE_false_colours_EFFECT,"grudges fade twice as fast"
-PORT_MAP_LINE,"A torn chart of an island, said to lie in the {0}. Match its coast at sea and dig at the X. Maps carried: {1}."
+PORT_MAP_LINE,"A torn chart of an island, said to lie in {0}. Match its coast at sea and dig at the X. Maps carried: {1}."
 PORT_MAP_NONE,"No bottle maps for sale today."
 PORT_MAP_BUY,"Buy the map · {0} gold"
 PORT_TABS_HINT,"[[FirePort]] / [[FireStarboard]] turn the page · Esc casts off"
 PORT_COL_NOTE,notes
 PORT_COL_HERE,here
+PORT_QTY_MAX,max
+PORT_CONFIRM,Confirm?
 PORT_ROLE_MAKES_SHORT,made
 PORT_ROLE_WANTS_SHORT,wanted
 PORT_REPAIRS,Repairs
@@ -355,7 +394,7 @@ PORT_HULL_HP,"Hull {0} of {1}"
 PORT_REPAIR_COST,"{0} gold a point · full repair {1} gold"
 PORT_TRADE_IN,"Trade-in for yours: {0} gold"
 PORT_HULL_STATS,"hull {0} · hold {1} · crew {2} · guns {3}"
-PORT_HULL_NICHE,"speed ×{0} · points {1}° · {2} · {3} officer berths"
+PORT_HULL_NICHE,"speed ×{0} · points {1}° · {2} · officers {3}"
 PORT_HULL_YOURS_SHORT,Yours
 PORT_HULL_BUY_SHORT,"{0} gold"
 PORT_HULL_SWAP,"Trade down · the yard pays {0} gold"
@@ -549,10 +588,11 @@ HINT_tack,"To go upwind, zigzag: sail close-hauled, then turn through the wind w
 HINT_dock,"[[Dock]] docks inside a harbour ring. Buy what is cheap here and sell it where it is wanted."
 HINT_trade,"Prices move as you buy and sell, and drift back over days. The chart ([[Chart]]) remembers what you saw."
 HINT_hostile,"A hostile sail. Hold [[FirePort]] or [[FireStarboard]] to aim a broadside and release to fire; ram with speed on if you must."
-HINT_leak,"Water in the hold: [[Order3]] sends hands to the pumps and carpenters to the leaks; [[Order4]] goes back to balanced. A shipwright mends the rest."
+HINT_leak,"Water in the hold: below 60% hull she floods, above it she drains. [[Order3]] puts carpenters first to plug leaks and patch her; [[Order4]] goes back to balanced. A shipwright mends the rest."
 HINT_night,"Night: your lantern is lit, so you see farther but are seen from afar. [[Lantern]] douses it to slip past unseen."
 HINT_threat,"The bar at the top is the Threat. The sea grows crueller by the day, whatever you do."
 HINT_chart,"[[Chart]] opens the chart: pins, rumours, cove hints and bottle maps live there."
+HINT_cartographer,"No cartographer aboard: you see the sea around you, but nothing is kept on the chart. Dock with [[Dock]] and hire one at the tavern."
 HINT_spyglass,"Hold the right mouse button to raise the spyglass toward the cursor."
 HINT_storm,"A storm: shorten sail before the wind tears it, and keep the bow to the swells."
 OPT_TITLE,Options
@@ -609,10 +649,10 @@ HUD_KNOTS,kn
 HUD_STATION_0,guns
 HUD_STATION_1,sails
 HUD_STATION_2,repair
-HUD_STATION_3,pumps
+HUD_STATION_3,spare
 ORDER_NAME_BATTLE,Battle stations
 ORDER_NAME_MAKESAIL,Make sail
-ORDER_NAME_REPAIR,Repair & pump
+ORDER_NAME_REPAIR,Repair
 ORDER_NAME_BALANCED,Balanced
 ORDER_NAME_CUSTOM,Custom
 HUD_LEGEND_SAIL,sail
@@ -624,6 +664,7 @@ HUD_LEGEND_CREW,crew
 HUD_LEGEND_LANTERN,lantern
 HUD_LEGEND_DOCK,dock
 HUD_LEGEND_CHART,chart
+HUD_LEGEND_CHART_NONE,chart (no cartographer)
 HUD_LEGEND_PAUSE,pause
 HUD_KEY_RMB,RMB
 HUD_KEY_ESC,Esc
@@ -634,7 +675,7 @@ HUD_STAND_NO_HARBOUR,No harbour on your chart will take her in
 HUD_MARK,"{0} · {1} m"
 HUD_MARK_MORE,"{0} +{1} · {2} m"
 HUD_MARK_REPORTED,"{0} · lookout"
-HUD_STAND_PUMP,every spare hand to the pumps
+HUD_STAND_PATCH,carpenters first: patch her over the flood line
 TITLE_VOYAGE_HEAD,A New Voyage
 TITLE_NAME_PLACEHOLDER,Her name
 TITLE_ABANDON_HEAD,Abandon the saved voyage?
@@ -648,3 +689,77 @@ LOG_BEST_LOST,"lost {0} · {1}"
 LOG_BEST_SHIP,"the {0} · {1}"
 LOG_REWARD,"unlocks the {0}"
 LOG_REWARD_HAVE,"{0} unlocked"
+PORT_TAB_OFFICE,Harbour office
+PORT_OFFICE_BOARD,Work on offer
+PORT_OFFICE_BOARD_NOTE,"Paid on delivery, less anything advanced. Miss the day and the advance is owed back."
+PORT_OFFICE_EMPTY,Nothing on the board today.
+CONTRACT_freight,Freight
+CONTRACT_dispatch,Dispatches
+CONTRACT_contraband,Contraband
+PORT_OFFER_TITLE,"{0} for {1}"
+PORT_OFFER_CARGO_freight,"{0} sealed crates, a slot each · {1} · about {2} days' sail"
+PORT_OFFER_CARGO_dispatch,"Letters under seal, no hold space · {1} · about {2} days' sail"
+PORT_OFFER_CARGO_contraband,"{0} crates, no questions asked · {1} · about {2} days' sail"
+PORT_OFFER_TERMS,"Pays {0} gold, {1} of it now · deliver by {2}"
+PORT_OFFER_TERMS_SMUGGLE,"Pays {0} gold on delivery · deliver by {1}. Customs at Crown and free ports, and Crown patrols that come alongside, may search her."
+PORT_OFFER_SIGN,Sign
+PORT_OFFER_NOROOM,No room
+PORT_OFFER_FULL,Hands full
+PORT_OFFICE_HELD,"Your contracts · {0} of {1}"
+PORT_OFFICE_NONE_HELD,None in hand. Sign for work on the left.
+PORT_CONTRACT_LINE,"{0} for {1} · by {2}"
+PORT_CONTRACT_DETAIL_freight,"{0} crates in the hold · {1} gold more on delivery."
+PORT_CONTRACT_DETAIL_dispatch,"Letters under seal · {1} gold more on delivery."
+PORT_CONTRACT_DETAIL_contraband,"{0} crates of contraband · {1} gold on delivery."
+PORT_CONTRACT_FORFEIT,"Giving up returns the {0} gold advance."
+PORT_CONTRACT_ABANDON,Give up
+PORT_BOUNTY_HEAD,Crown bounties
+PORT_BOUNTY_OWED,"The Crown owes you {0} gold for pirates sunk ({1}). Any Crown port pays it."
+PORT_BOUNTY_NONE,"The Crown pays a bounty for every pirate sunk, raider or hunter, at any of its ports."
+PORT_ARRIVAL_HEAD,On arrival
+PORT_ARRIVAL_GAIN,"+{0} gold on arrival · harbour office"
+PORT_ARRIVAL_LOSS,"−{0} gold on arrival · harbour office"
+RECEIPT_SURVEY,"The harbour master bought your soundings of the approaches: +{0} gold."
+RECEIPT_DELIVERED,"Delivered for {1}: +{0} gold."
+RECEIPT_SMUGGLED,"Contraband landed for {1}, no questions asked: +{0} gold."
+RECEIPT_BOUNTY,"Crown bounty on pirates sunk ({1}): +{0} gold."
+RECEIPT_CAUGHT,"Customs searched her and found the contraband: seized, and a fine of {0} gold."
+PORT_RESULT_BUSY,You already carry three contracts.
+NOTICE_BOUNTY,"A pirate sunk: the Crown owes you {0} gold. Claim it at any Crown port."
+NOTICE_CONTRACT_LATE,"Too late for {0}: the contract is void and the advance is owed back."
+NOTICE_SEARCH_CLEAR,"A Crown patrol came alongside and searched her. Nothing found."
+NOTICE_SEARCH_CAUGHT,"A Crown patrol found the contraband: seized, and a fine of {0} gold."
+CHART_KEY_CONTRACT,Delivery due
+CHART_CONTRACT_DUE,"due {0}"
+FACTION_ADJ_crown,Crown
+FACTION_ADJ_freetraders,Free Trader
+FACTION_ADJ_brethren,Brethren
+ROLE_merchant,merchantman
+ROLE_patrol,patrol
+ROLE_raider,raider
+ROLE_hunter,hunter
+ROLE_privateer,privateer
+ROLE_sparring,sparring partner
+ROLE_none_crown,navy ship
+ROLE_none_freetraders,trader
+ROLE_none_brethren,pirate
+SHIPCARD_KIND,"{0} {1} · {2}"
+SHIPCARD_YOURS,"Your {0}"
+SHIPCARD_HUNTING,Hunting you
+SHIPCARD_HOSTILE,Hostile: attacks on sight
+SHIPCARD_WARY,Wary of you: she will run
+SHIPCARD_FRIENDLY,Friendly toward you
+SHIPCARD_NEUTRAL,Neutral toward you
+SHIPCARD_HULL,"Hull {0} of {1}"
+SHIPCARD_FOUNDERING,foundering
+SHIPCARD_LEAKING,leaking
+SHIPCARD_ARMS,"{0} guns, {2}-pounders · {1} hands"
+SHIPCARD_UNARMED,"No guns · {0} hands"
+SHIPCARD_LADEN,"Laden with {0} {1}"
+SHIPCARD_BALLAST,In ballast
+SHIPCARD_BOUND,"{0}, bound for {1}"
+SHIPCARD_UNCHARTED,a port you have not charted
+SHIPCARD_BOUNTY,"Crown bounty: {0} gold"
+SHIPCARD_RANGE,"{0} m off · {1} kn"
+SHIPCARD_IN_REACH,within reach of your guns
+SHIPCARD_OWN_HOLD,"Hold {0} of {1} · {2} kn"

@@ -79,12 +79,10 @@ public class CombatTests
     }
 
     [Fact]
-    public void EveryTenPercentLostOpensALeakAndWaterRises()
+    public void EveryTenPercentLostOpensALeak()
     {
         var w = Sea.Fixed();
         var ship = w.Ship;
-        ship.Crew = 1;   // nobody to pump or plug
-        ship.Order = CrewOrder.Battle;
         var rng = new Rng(1);
         ship.Hit(9, null, rng);
         Assert.Equal(0, ship.Leaks);
@@ -92,31 +90,48 @@ public class CombatTests
         Assert.Equal(1, ship.Leaks);
         ship.Hit(31, null, rng);
         Assert.Equal(4, ship.Leaks);
-        double water = ship.Water;
-        for (int i = 0; i < 30 * 5; i++) w.Tick(new ShipInput(0, 0));
-        Assert.InRange(ship.Water - water, 19, 21);   // 4 leaks × 1%/s × 5 s
-        Assert.True(ship.WaterFactor < 1);
     }
 
     [Fact]
-    public void PumpsAndCarpentersFightTheWaterAndPatchTheHull()
+    public void TheWaterFollowsTheHullAroundTheFloodLine()
+    {
+        var w = Sea.Fixed();
+        var ship = w.Ship;
+        ship.Crew = 1;   // nobody to patch
+        ship.Order = CrewOrder.Battle;
+        ship.HullHp = 40;   // 20% under the line: +2%/s
+        for (int i = 0; i < 30 * 5; i++) w.Tick(new ShipInput(0, 0));
+        Assert.InRange(ship.Water, 9.9, 10.1);
+        Assert.True(ship.WaterFactor < 1);
+        ship.Leaks = 5;     // leaks let in nothing of their own
+        ship.HullHp = 60;   // on the line: steady
+        for (int i = 0; i < 30 * 5; i++) w.Tick(new ShipInput(0, 0));
+        Assert.InRange(ship.Water, 9.9, 10.1);
+        ship.HullHp = 90;   // 30% over the line: −3%/s
+        for (int i = 0; i < 30 * 2; i++) w.Tick(new ShipInput(0, 0));
+        Assert.InRange(ship.Water, 3.9, 4.1);
+        for (int i = 0; i < 30 * 2; i++) w.Tick(new ShipInput(0, 0));
+        Assert.Equal(0, ship.Water);
+    }
+
+    [Fact]
+    public void CarpentersPlugTheLeaksThenPatchHerOverTheFloodLineAndSheDrains()
     {
         var w = Sea.Fixed();
         var ship = w.Ship;
         ship.Crew = 10;
         ship.Cannons = 0;
-        ship.Order = CrewOrder.Repair;          // 1 carpenter, 1 rigger, 8 on the pumps
+        ship.Order = CrewOrder.Repair;          // 1 carpenter, 1 rigger, 8 spare
         Assert.Equal(new[] { 0, 1, 1, 8 }, ship.Stations());
         ship.Leaks = 2;
-        ship.Water = 50;
         ship.HullHp = 40;
         w.Player.Cargo[(int)Good.Timber] = 3;
         for (int i = 0; i < 30 * 20; i++) w.Tick(new ShipInput(0, 0));
         Assert.Equal(0, ship.Leaks);            // one plugged every 8 s
-        Assert.True(ship.Water < 50, $"water {ship.Water}");
+        Assert.True(ship.Water > 30, $"water {ship.Water}");   // rising all the while she is under the line
         Assert.True(ship.HullHp > 40, "patching started once the leaks were plugged");
-        for (int i = 0; i < 30 * 60; i++) w.Tick(new ShipInput(0, 0));
-        Assert.Equal(0, ship.Water, 6);
+        for (int i = 0; i < 30 * 100; i++) w.Tick(new ShipInput(0, 0));
+        Assert.Equal(0, ship.Water, 6);         // over the line she drains
         Assert.Equal(70, ship.HullHp, 0);       // the 70% cap at sea
         Assert.Equal(0, w.Player.Units(Good.Timber));   // 30 HP patched = 3 planks
     }
@@ -145,9 +160,9 @@ public class CombatTests
         w.Tick(new ShipInput(0, 0));
         Assert.True(ship.Foundering);
         Assert.False(ship.WaterOnlyStand);
-        Assert.InRange(ship.Hourglass, 19.5, 20);
+        Assert.InRange(ship.Hourglass, Ship.StandGlass - 0.5, Ship.StandGlass);
         Assert.False(ship.CanFire(Side.Port));
-        for (int i = 0; i < 30 * 21; i++) w.Tick(new ShipInput(0, 0));
+        for (int i = 0; i < 30 * (Ship.StandGlass + 1); i++) w.Tick(new ShipInput(0, 0));
         Assert.True(ship.Sunk);
         Assert.True(w.RunOver);
         Assert.Equal("SUNK_SEA", w.CauseOfSinking);
@@ -157,21 +172,22 @@ public class CombatTests
     }
 
     [Fact]
-    public void PumpingHardExtendsTheStandAndAWaterOnlyStandCanBeRecovered()
+    public void AWaterOnlyStandCanBePatchedOutOf()
     {
         var w = Sea.Fixed();
         var ship = w.Ship;
         ship.Crew = 10;
         ship.Cannons = 0;
-        ship.Order = CrewOrder.Repair;   // 8 pumping
-        ship.Water = 99.9;
-        ship.Leaks = 30;                 // the sea wins this tick
+        ship.Order = CrewOrder.Repair;   // a carpenter
+        ship.HullHp = 55;
+        ship.Water = 100;
+        w.Player.Cargo[(int)Good.Timber] = 2;
         w.Tick(new ShipInput(0, 0));
         Assert.True(ship.Foundering && ship.WaterOnlyStand);
-        Assert.InRange(ship.Hourglass, 34, 35);   // 20 + min(15, 8 × 3)
-        ship.Leaks = 0;
-        for (int i = 0; i < 30 * 15; i++) w.Tick(new ShipInput(0, 0));
-        Assert.False(ship.Foundering, "pumped below 80%: the stand ends");
+        Assert.InRange(ship.Hourglass, Ship.StandGlass - 0.1, Ship.StandGlass);
+        // She patches on through the stand: over the flood line at 5 s, 70% at 15 s, under 80% water by ~30 s.
+        for (int i = 0; i < 30 * 33 && ship.Foundering; i++) w.Tick(new ShipInput(0, 0));
+        Assert.False(ship.Foundering, "drained below 80%: the stand ends");
         Assert.False(ship.Sunk);
     }
 
@@ -245,7 +261,7 @@ public class CombatTests
         int gold = w.Player.Gold;
         w.Tick(new ShipInput(0, 0, FireStarboard: true));
         bool sank = false;
-        for (int i = 0; i < 30 * 30 && !sank; i++)
+        for (int i = 0; i < 30 * 40 && !sank; i++)
         {
             w.Tick(new ShipInput(0, 0));
             sank = w.Events.Any(e => e.Type == CombatEventType.Sink);

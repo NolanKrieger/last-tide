@@ -1,6 +1,9 @@
 namespace LastTide.Sim;
 
-/// <summary>Merchantmen trade between ports and flee anything hostile (GDD §8). Their cargo moves real stock.</summary>
+/// <summary>
+/// Merchantmen trade between ports and flee anything hostile, answering with their few guns as they run (GDD §8).
+/// Their cargo moves real stock.
+/// </summary>
 public sealed class MerchantCaptain : Captain
 {
     public override ShipInput Tick(World world, Ship ship)
@@ -12,7 +15,7 @@ public sealed class MerchantCaptain : Captain
             ai.Fleeing = true;
             ai.FleeTime = 12;
             ai.Waypoint = threat.Pos;   // keep running from here once it drops out of sight (audit C-03)
-            return Seamanship.Flee(world, ship, threat.Pos);
+            return Seamanship.FightingRetreat(world, ship, threat);
         }
         if (ai.Fleeing)
         {

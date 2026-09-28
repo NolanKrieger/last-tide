@@ -4,6 +4,8 @@ public sealed partial class World
 {
     public const double NearRadius = 1500;       // ships closer than this get full physics
     public const double FortRange = 200, FortReload = 10, FortDamage = 8;
+    /// <summary>Guns a merchantman carries (two a side): enough to answer an attacker as she runs, never to go looking for a fight.</summary>
+    public const int MerchantGuns = 4;
 
     public Preset Preset { get; set; } = Preset.RoughSeas;
     public double ThreatNow => Threat.Of(Preset, DaysSurvived);
@@ -13,6 +15,13 @@ public sealed partial class World
     public bool DirectorEnabled { get; set; } = true;
     readonly Dictionary<int, double> fortClocks = new();
     public int HuntersAlive => Others.Count(s => s.Ai?.Role is Role.Hunter or Role.Privateer);
+
+    /// <summary>
+    /// A ship's name: hers is the one the player gave; every other is drawn from the run's seed and the ship's id, so it
+    /// holds across saves and replays and costs the run's random stream nothing.
+    /// </summary>
+    public string NameOf(Ship s) =>
+        s.IsPlayer ? Player.ShipName : Names.Ship(new Rng((ulong)(uint)Seed * 0x9E3779B97F4A7C15UL + (ulong)(uint)s.Id * 0xBF58476D1CE4E5B9UL + 7));
 
     // ---- Hostility (GDD §8) ----
     public bool PlayerHostileTo(Faction f) => Player.Rep(f) <= -20;
@@ -119,7 +128,7 @@ public sealed partial class World
         ship.Ai = new AiState { Role = role, HomePort = port.Id, Wait = Rng.Range(2, 30) };
         if (role == Role.Merchant)
         {
-            ship.Cannons = Math.Min(ship.Cannons, 2);
+            ship.Cannons = Math.Min(ship.Cannons, MerchantGuns);
             ship.Order = CrewOrder.MakeSail;
         }
         return ship;
@@ -144,7 +153,7 @@ public sealed partial class World
         ship.Ai = new AiState { Role = role, HomePort = home.Id, Wait = Rng.Range(2, 30) };
         if (role == Role.Merchant)
         {
-            ship.Cannons = Math.Min(ship.Cannons, 2);
+            ship.Cannons = Math.Min(ship.Cannons, MerchantGuns);
             ship.Order = CrewOrder.MakeSail;
         }
         return ship;
@@ -223,51 +232,61 @@ public sealed partial class World
 
     // ---- Lanes (audit R-09) ----
     // A* per port pair ran inside a tick the first time a merchant took each lane (3 ms on average, 24 ms at worst, some
-    // 500 lanes). Now each harbour gets one breadth-first sea-distance field (~3 ms), warmed one a tick from the start of
-    // a voyage with traffic, and a lane is the walk down that field from the other harbour, string-pulled. Lanes depend
-    // on the map alone, so when they are computed changes nothing (save/load and replays agree).
-    readonly Dictionary<int, float[]> harbourFields = new();
+    // 500 lanes). Now each harbour gets one breadth-first sea-distance field over the water round it (LaneReach), warmed
+    // one a tick from the start of a voyage with traffic, and a lane is the walk down that field from the other harbour,
+    // string-pulled. Lanes depend on the map alone, so when they are computed changes nothing (save/load and replays agree).
+    /// <summary>How far round a destination its sea-distance field reaches: past the longest merchant run (2.2 km) with room for detours.</summary>
+    public const double LaneReach = 3600;
     int fieldsWarmed;
 
-    float[] HarbourField(Port port)
-    {
-        if (!harbourFields.TryGetValue(port.Id, out var field))
-            harbourFields[port.Id] = field = Array.ConvertAll(Map.Nav.Distances(port.Harbor), d => (float)d);
-        return field;
-    }
+    NavGrid.LocalField HarbourField(Port port) => Map.Nav.LocalDistances(port.Harbor, LaneReach);
 
-    /// <summary>One harbour's field a tick until every harbour a merchant can make for has one.</summary>
+    /// <summary>
+    /// One harbour a tick: its field is traced once for every lane into it from a port a merchant could sail from, then
+    /// dropped. A field per harbour over the whole chart would be ~1.5 MB each.
+    /// </summary>
     void WarmLanes()
     {
-        while (fieldsWarmed < Map.Ports.Count && (Map.Ports[fieldsWarmed].Secret || harbourFields.ContainsKey(Map.Ports[fieldsWarmed].Id)))
-            fieldsWarmed++;
+        while (fieldsWarmed < Map.Ports.Count && Map.Ports[fieldsWarmed].Secret) fieldsWarmed++;
         if (fieldsWarmed >= Map.Ports.Count) return;
-        HarbourField(Map.Ports[fieldsWarmed++]);
+        var to = Map.Ports[fieldsWarmed++];
+        NavGrid.LocalField? field = null;
+        foreach (var from in Map.Ports)
+        {
+            if (from == to || from.Secret || routeCache.ContainsKey((from.Id, to.Id)) || from.Harbor.DistanceTo(to.Harbor) > 2200) continue;
+            field ??= HarbourField(to);
+            routeCache[(from.Id, to.Id)] = Trace(from, to, field.Value);
+        }
     }
 
     /// <summary>The lane from one harbour to another: down the destination's field, string-pulled; empty if no sea route.</summary>
     public List<Vec2> Lane(Port from, Port to)
     {
-        if (routeCache.TryGetValue((from.Id, to.Id), out var lane)) return lane;
+        if (!routeCache.TryGetValue((from.Id, to.Id), out var lane))
+            routeCache[(from.Id, to.Id)] = lane = Trace(from, to, HarbourField(to));
+        return lane;
+    }
+
+    List<Vec2> Trace(Port from, Port to, NavGrid.LocalField field)
+    {
         var nav = Map.Nav;
-        var field = HarbourField(to);
         int x = NavGrid.ToX(from.Harbor.X), y = NavGrid.ToY(from.Harbor.Y);
         if (nav.IsLand(x, y)) (x, y) = nav.NearestSea(x, y);
-        lane = new List<Vec2>();
-        if (x >= 0 && y >= 0 && x < nav.W && y < nav.H && field[y * nav.W + x] >= 0)
+        var lane = new List<Vec2>();
+        if (field.At(x, y) >= 0)
         {
             var pts = new List<Vec2> { from.Harbor };
-            for (int guard = 0; guard < nav.W * nav.H && field[y * nav.W + x] > 0; guard++)
+            for (int guard = 0; guard < field.W * field.H && field.At(x, y) > 0; guard++)
             {
                 int bx = -1, by = -1;
-                float bd = field[y * nav.W + x];
+                float bd = field.At(x, y);
                 for (int dy = -1; dy <= 1; dy++)
                     for (int dx = -1; dx <= 1; dx++)
                     {
                         int nx = x + dx, ny = y + dy;
                         if ((dx == 0 && dy == 0) || nav.IsLand(nx, ny)) continue;
                         if (dx != 0 && dy != 0 && nav.IsLand(x + dx, y) && nav.IsLand(x, y + dy)) continue;
-                        float d = field[ny * nav.W + nx];
+                        float d = field.At(nx, ny);
                         if (d >= 0 && d < bd) { bd = d; bx = nx; by = ny; }
                     }
                 if (bx < 0) break;
@@ -284,7 +303,6 @@ public sealed partial class World
             pts.Add(to.Harbor);
             lane = Pull(nav, pts);
         }
-        routeCache[(from.Id, to.Id)] = lane;
         return lane;
     }
 
@@ -350,7 +368,11 @@ public sealed partial class World
         int hunters = HuntersAlive;
         if (hunters < lastHunters) Director.QuietFor = Director.QuietAfterHunter;   // one gave up or went down: a breather
         lastHunters = hunters;
-        var card = Docked == null && DirectorEnabled ? Director.Tick(Dt, ThreatNow, PlayerHostileTo(Faction.Crown), hunters, Rng, IsNight ? 1.5 : 1) : null;
+        // Raiders press harder at night and in their own waters (the Corsair Keys).
+        double press = (IsNight ? 1.5 : 1) * (Map.InBounds(Ship.Pos) ? RegionDef.Of(Map.RegionAt(Ship.Pos).Type).Raiders : 1);
+        // Beyond the chart the sea is the only hunter: no pirate follows her out there (other ships keep to the chart).
+        bool beyond = Map.BeyondEdge(Ship.Pos) > 0;
+        var card = Docked == null && DirectorEnabled && !beyond ? Director.Tick(Dt, ThreatNow, PlayerHostileTo(Faction.Crown), hunters, Rng, press) : null;
         if (card != null) SpawnCard(card);
 
         for (int i = 0; i < Others.Count; i++)
@@ -364,7 +386,7 @@ public sealed partial class World
             {
                 var w = WindAt(ship.Pos);
                 Swells(ship);
-                ship.Step(Dt, w, input, Islands);
+                ship.Step(Dt, w, input, Map.IslandsAround(ship.Pos));
                 KeepShipOnTheChart(ship);
                 if (input.FirePort) Fire(ship, Side.Port);
                 if (input.FireStarboard) Fire(ship, Side.Starboard);

@@ -400,6 +400,7 @@ public class AuditTradeTests
     public void ACoveSightedThroughTheSpyglassCounts()
     {
         var w = Docked(4);
+        w.Player.Officers.Add(new Officer { Type = OfficerType.Cartographer, Tier = 0 });   // he marks what the glass finds
         Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.CastOff)));
         w.Islands.Clear();
         foreach (var cove in w.Map.Ports.Where(p => p.Secret))

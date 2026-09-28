@@ -46,18 +46,24 @@ public sealed partial class World
         SirenPull = 0;
         Pinned = false;
         var region = Map.RegionAt(Ship.Pos).Type;
-        // A pinned wind is the laboratory: no regional drag there.
-        Ship.SpeedMult = !Wind.Fixed && region == RegionType.Sargasso ? SargassoDrag : 1;
+        double beyond = Map.BeyondEdge(Ship.Pos);
+        // A pinned wind is the laboratory: no regional drag there. The weed ends at the chart's edge.
+        Ship.SpeedMult = !Wind.Fixed && region == RegionType.Sargasso && beyond <= 0 ? SargassoDrag : 1;
         foreach (var other in Others)
-            other.SpeedMult = !Wind.Fixed && Map.RegionAt(other.Pos).Type == RegionType.Sargasso ? SargassoDrag : 1;
+            other.SpeedMult = !Wind.Fixed && Map.RegionAt(other.Pos).Type == RegionType.Sargasso && Map.InBounds(other.Pos) ? SargassoDrag : 1;
 
-        EruptionTick(region);
+        EruptionTick(beyond <= 0 ? region : RegionType.Deep);
 
         if (Monster == null)
         {
             if (!MonstersEnabled) return;   // the switch stops new beasts, not one already in play
             MonsterClock -= Dt;
             if (MonsterClock > 0) return;
+            if (beyond > 0)
+            {
+                OuterMonsterRoll(beyond);
+                return;
+            }
             MonsterClock = Tuning.SecondsPerHour;   // roll once an in-game hour
             var def = RegionDef.Of(region);
             if (def.Monster == MonsterType.None || Docked != null) return;
@@ -69,6 +75,8 @@ public sealed partial class World
 
         var m = Monster;
         m.Age += Dt;
+        // Beyond the chart nothing gives up the chase at a region's border: the open sea is every beast's home water.
+        if (beyond > 0) region = m.Def.Region;
         switch (m.Type)
         {
             case MonsterType.ReefSerpent: SerpentTick(m, region); break;
@@ -82,7 +90,7 @@ public sealed partial class World
         {
             Notices.Enqueue(m.Beaten ? "NOTICE_MONSTER_BEATEN" : "NOTICE_MONSTER_ESCAPED");
             Monster = null;
-            MonsterClock = MonsterRest;
+            MonsterClock = MonsterRest / (1 + 2 * EdgePressure(beyond));   // out there the next is not long coming
         }
     }
 
@@ -100,6 +108,9 @@ public sealed partial class World
                 break;
             case MonsterType.GhostShip:
                 m.Pos = Ship.Pos + Vec2.FromAngle(Rng.Range(0, Angles.Tau)) * 260;
+                m.Heading = Ship.Heading;   // out of the fog on her course; she comes round from there
+                m.Side = (m.Pos - Ship.Pos).Dot(Ship.Right) >= 0 ? 1 : -1;   // takes station on the side she appears
+                m.Bites = 0;
                 m.Surfaced = true;
                 m.FlareClock = 5;
                 m.State = MonsterState.Surfaced;
@@ -261,11 +272,10 @@ public sealed partial class World
         if (!abroad) { m.Timer += Dt; if (m.Timer > 12) { m.Done = true; return; } }
         else m.Timer = 0;
         if (m.Hp <= 0) { Beat(m); return; }
-        // Keeps station abeam, 120 m off, on a parallel course; changes sides now and then.
-        m.Bites = (int)(m.Age / 35) % 2 == 0 ? 1 : -1;
-        var want = Ship.Pos + Ship.Right * (m.Bites * 120) - Ship.Forward * 10;
-        MoveToward(m, want, 12);
-        m.Heading = Ship.Heading;
+        // Keeps station abeam, 120 m off, on a parallel course; after 35 s there she crosses to the other side
+        // (Side is her side, Bites the ticks she has held station on it).
+        if (GhostSail(m, m.Side)) m.Bites++;
+        if (m.Bites * Dt >= 35) { m.Side = -m.Side; m.Bites = 0; }
         m.Targets[0].Pos = m.Pos;
         m.FlareClock -= Dt;
         if (m.FlareTimer > 0) m.FlareTimer -= Dt;
@@ -279,6 +289,31 @@ public sealed partial class World
                 Balls.Add(new Cannonball { Pos = m.Pos + dir * 10, Vel = dir.Rotated(Angles.Rad(Rng.Range(-4, 4))) * BallSpeed, Life = 200 / BallSpeed, Shooter = null, From = MonsterType.GhostShip, Damage = 4, Delay = k * 0.05 });
             Events.Add(new CombatEvent(CombatEventType.Fire, m.Pos, -3, 2));
         }
+    }
+
+    const double GhostTopSpeed = 12, GhostTurnRate = 0.45;   // m/s; rad/s at steerage way (a sloop at ⅓ sail: 0.7)
+
+    /// <summary>She sails to her station like a ship: along her bow, turning at a ship's rate, slowing to come round,
+    /// never sliding sideways. Changing sides she crosses well under the player's stern rather than through her.
+    /// True while she holds her station.</summary>
+    bool GhostSail(Monster m, int side)
+    {
+        bool crossing = (m.Pos - Ship.Pos).Dot(Ship.Right) * side < 30;   // not yet out on her new side
+        var station = crossing
+            ? Ship.Pos - Ship.Forward * 80 + Ship.Right * (side * 60)   // past the line, so she clears it
+            : Ship.Pos + Ship.Right * (side * 120) - Ship.Forward * 10;
+        // Always a little faster than the player, so she can come up again after dropping astern to cross.
+        double top = Math.Max(GhostTopSpeed, Ship.Speed + 3);
+        // The course she wants: the player's own way plus a pull toward the station (a gap closes in about 4 s).
+        var want = Ship.Vel + (station - m.Pos) * 0.25;
+        double wantSpeed = Math.Min(want.Length, top);
+        // Nearly there (or both hove to), she lies parallel rather than swinging her bow at a few metres' gap.
+        double err = Angles.Wrap((wantSpeed > 1.5 ? want.Angle : Ship.Heading) - m.Heading);
+        double speed = Math.Clamp(want.Dot(Vec2.FromAngle(m.Heading)), 0.3 * wantSpeed, top);
+        double turn = GhostTurnRate * Math.Clamp(speed / 6, 0.4, 1) * Dt;
+        m.Heading = Angles.Wrap(m.Heading + Math.Clamp(err, -turn, turn));
+        m.Pos += Vec2.FromAngle(m.Heading) * (speed * Dt);
+        return !crossing && m.Pos.DistanceTo(station) < 30;
     }
 
     // ---- Giant Crocodile: lunges from the bank, jams the rudder, slides back ----
@@ -340,7 +375,7 @@ public sealed partial class World
                 m.Targets[0].Pos = m.Pos;
                 Pinned = true;
                 Ship.Vel = Ship.Vel * 0.5;
-                Ship.Water = Math.Min(100, Ship.Water + 3 * Dt);
+                Ship.Water = Math.Min(100, Ship.Water + (3 + Math.Max(0, -Ship.FloodPerSecond)) * Dt);   // she cannot drain while it holds her
                 Ship.Split(out _, out _, out int carpenters, out _);
                 m.Targets[0].Hp -= carpenters * 5 * Dt;   // carpenters hack at it
                 if (m.Targets[0].Hp <= 0)

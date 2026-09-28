@@ -15,6 +15,7 @@ static class Sea
         w.MonstersEnabled = false;
         w.DirectorEnabled = false;
         w.Islands.Clear();
+        w.Map.Whirlpools.Clear();
         w.Ship.Pos = Vec2.Zero;
         w.Ship.Vel = Vec2.Zero;
         w.Ship.Heading = Angles.FromCompassDeg(0);

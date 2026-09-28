@@ -131,7 +131,10 @@ public class MonsterTests
         bool ghostFired = false, passedThrough = false, struck = false;
         for (int i = 0; i < 30 * 120 && !m.Done; i++)
         {
-            w.Tick(Gunnery(w, m.Pos));
+            // Pick the window: first the dark between flares (the shot must pass through), then a flare. A 12 s reload
+            // against a 6 s flare cycle can otherwise land every broadside in the same half and never test the other.
+            bool dark = m.FlareTimer <= 0 && m.FlareClock > 1.8, flaring = m.FlareTimer > 1.8;
+            w.Tick((passedThrough ? flaring : dark) ? Gunnery(w, m.Pos) : new ShipInput(0, 0));
             ghostFired |= w.Events.Any(e => e.Type == CombatEventType.Fire && e.ShipId == -3);
             passedThrough |= w.Events.Any(e => e.Type == CombatEventType.Splash && e.ShipId == -3);
             struck |= w.Events.Any(e => e.Type == CombatEventType.Hit && e.ShipId == -3);
@@ -139,6 +142,45 @@ public class MonsterTests
         Assert.True(ghostFired, "it fires broadsides");
         Assert.True(passedThrough, "balls pass through it between flares");
         Assert.True(struck, "and strike it during a flare");
+    }
+
+    [Fact]
+    public void TheGhostShipSailsToHerStationAndCrossesUnderTheStern()
+    {
+        // Baseline: she slid straight at a point beside the player with the player's heading copied onto her, so she
+        // crabbed sideways across the screen, and changing sides she slid through the player's hull.
+        var w = In(RegionType.FogBanks);
+        Run(w, 80);
+        w.Islands.Clear();
+        w.Ship.Heading = Angles.FromCompassDeg(w.Ship.Pos.X > 0 ? 270 : 90);   // toward the wider sea, a beam reach either way
+        var m = w.SpawnMonster(MonsterType.GhostShip);
+        // Off the starboard bow, heading away: she has to come about to take station.
+        m.Pos = w.Ship.Pos + w.Ship.Forward * 60 + w.Ship.Right * 200;
+        m.Heading = Angles.Wrap(w.Ship.Heading + Math.PI / 2);
+        m.Side = 1;
+        int firstSide = m.Side;
+        bool held = false, crossed = false;
+        double closest = double.MaxValue, maxTurn = 0;
+        for (int i = 0; i < 30 * 120 && !m.Done; i++)
+        {
+            var (pos, heading) = (m.Pos, m.Heading);
+            w.Tick(new ShipInput(0, i < 10 ? 1 : 0));   // full sail, straight on
+            var step = m.Pos - pos;
+            if (step.Length > 1e-4)
+                Assert.True(Math.Abs(step.Normalized.Cross(Vec2.FromAngle(m.Heading))) < 1e-9, $"she moves along her bow (t={i / 30.0:0.0} s)");
+            maxTurn = Math.Max(maxTurn, Math.Abs(Angles.Wrap(m.Heading - heading)));
+            var rel = m.Pos - w.Ship.Pos;
+            double lat = rel.Dot(w.Ship.Right), fwd = rel.Dot(w.Ship.Forward);
+            bool abeam = Math.Abs(Math.Abs(lat) - 120) < 10 && Math.Abs(fwd) < 25 && Math.Abs(Angles.Wrap(m.Heading - w.Ship.Heading)) < Angles.Rad(10);
+            held |= abeam && Math.Sign(lat) == firstSide;
+            crossed |= held && abeam && Math.Sign(lat) == -firstSide;
+            closest = Math.Min(closest, rel.Length);
+        }
+        Assert.True(w.Ship.Speed > 8, "the player is under way");
+        Assert.True(held, "she comes up abeam on a parallel course");
+        Assert.True(crossed, "and after a while takes station on the other side");
+        Assert.True(maxTurn <= 0.45 / 30 + 1e-9, $"she turns like a ship ({Angles.Deg(maxTurn * 30):0} °/s)");
+        Assert.True(closest > 40, $"she never sails through the player ({closest:0} m)");
     }
 
     [Fact]
@@ -159,8 +201,10 @@ public class MonsterTests
 
         var s = In(RegionType.SirenRuins, seed: 23);
         var siren = s.SpawnMonster(MonsterType.Siren);
-        s.Ship.Pos = siren.Perch + new Vec2(120, 0);
-        s.Ship.Heading = Angles.FromCompassDeg(0);
+        var off = (s.Ship.Pos - siren.Perch).Normalized * 120;   // out from her rock over the water she was sighted from
+        double broadside = Angles.Wrap(off.Angle + Math.PI / 2);   // lying side-on, the rock abeam to starboard
+        s.Ship.Pos = siren.Perch + off;
+        s.Ship.Heading = broadside;
         s.Tick(new ShipInput(0, 0));
         Assert.NotEqual(0, s.SirenPull);
         double heading = s.Ship.Heading;
@@ -172,11 +216,11 @@ public class MonsterTests
         t = 0;
         while (!siren.Done && t++ < 30 * 200)
         {
-            s.Ship.Pos = siren.Perch + new Vec2(120, 0);
-            s.Ship.Heading = Angles.FromCompassDeg(0);
+            s.Ship.Pos = siren.Perch + off;
+            s.Ship.Heading = broadside;
             s.Tick(Gunnery(s, siren.Perch));
         }
-        Assert.True(siren.Beaten);
+        Assert.True(siren.Beaten, "shooting her perch silences her");
         Assert.Contains("deaf_ears", s.Player.Achievements);
     }
 
@@ -184,7 +228,7 @@ public class MonsterTests
     public void TheWeedKrakenDragsHerDownUntilTheMassIsCut()
     {
         var w = In(RegionType.Sargasso);
-        w.Ship.Order = CrewOrder.Repair;   // carpenters cut, the rest pump
+        w.Ship.Order = CrewOrder.Repair;   // carpenters cut
         var m = w.SpawnMonster(MonsterType.WeedKraken);
         int t = 0;
         while (m.State != MonsterState.Grip && t++ < 30 * 60) w.Tick(new ShipInput(0, 0));

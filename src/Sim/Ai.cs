@@ -282,7 +282,45 @@ public static class Seamanship
     }
 
     /// <summary>Runs from a threat on the fastest point of sail that leads away.</summary>
-    public static ShipInput Flee(World world, Ship ship, Vec2 threat)
+    public static ShipInput Flee(World world, Ship ship, Vec2 threat) =>
+        new(Helm(ship, FleeHeading(world, ship, threat)), Math.Sign(3 - ship.SailTarget));
+
+    /// <summary>How far off her escape course a fleeing ship will yaw to bring a loaded broadside to bear.</summary>
+    public const double YawLimitDeg = 50;
+
+    /// <summary>
+    /// A merchantman's defence: runs as <see cref="Flee"/> does, but while the attacker is inside her gun range and a
+    /// loaded side can be brought abeam of it within <see cref="YawLimitDeg"/> of the escape course, she yaws to it and
+    /// fires as it bears, then falls back on her course while the side reloads. One that comes alongside is answered at once.
+    /// </summary>
+    public static ShipInput FightingRetreat(World world, Ship ship, Ship threat)
+    {
+        double run = FleeHeading(world, ship, threat.Pos), want = run;
+        var rel = threat.Pos - ship.Pos;
+        if (rel.Length < ship.Range)
+        {
+            double bearing = rel.Angle, from = ship.LocalWind.From, noGo = Angles.Rad(ship.PointDeg + 4);
+            double best = Angles.Rad(YawLimitDeg);
+            foreach (var side in new[] { Side.Port, Side.Starboard })
+            {
+                if (!ship.CanFire(side)) continue;
+                double h = Angles.Wrap(side == Side.Starboard ? bearing - Math.PI / 2 : bearing + Math.PI / 2);
+                double off = Math.Abs(Angles.Wrap(h - run));
+                if (off <= best && Math.Abs(Angles.Wrap(h - from)) >= noGo)
+                {
+                    best = off;
+                    want = h;
+                }
+            }
+            if (want != run) want = AvoidLand(world, ship, want);
+        }
+        var shot = ClearShot(world, ship, threat);
+        return new ShipInput(Helm(ship, want), Math.Sign(3 - ship.SailTarget),
+            FirePort: shot == Side.Port && ship.CanFire(Side.Port), FireStarboard: shot == Side.Starboard && ship.CanFire(Side.Starboard));
+    }
+
+    /// <summary>The fastest point of sail that leads away from a threat, clear of land.</summary>
+    public static double FleeHeading(World world, Ship ship, Vec2 threat)
     {
         double away = (ship.Pos - threat).Angle;
         double from = ship.LocalWind.From;
@@ -298,7 +336,6 @@ public static class Seamanship
                 best = h;
             }
         }
-        best = AvoidLand(world, ship, best);
-        return new ShipInput(Helm(ship, best), Math.Sign(3 - ship.SailTarget));
+        return AvoidLand(world, ship, best);
     }
 }

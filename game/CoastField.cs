@@ -8,7 +8,7 @@ namespace LastTide;
 /// <list type="bullet">
 /// <item><see cref="Coast"/>: every island's coastline as the smooth curve the chart inks (a Catmull-Rom spline through the
 /// sim's polygon, so ports stay on it; it strays from the collision polygon by a metre or two at most).</item>
-/// <item><see cref="Sdf"/>: signed distance to that coastline in metres (negative on land), one texel per 6.25 m, exact
+/// <item><see cref="Sdf"/>: signed distance to that coastline in metres (negative on land), one texel per 8 m, exact
 /// Euclidean (nearest-point sweep). The sea shader draws the land wash, contours, surf, coastal halo, dotted shallows
 /// and deep water from it with no draw calls of its own.</item>
 /// <item><see cref="Regions"/>: the region index per 25 m texel (sampled nearest), so the shaders apply the same
@@ -18,7 +18,7 @@ namespace LastTide;
 /// </summary>
 public sealed class CoastField
 {
-    public const float Cell = 6.25f;
+    public const float Cell = 8f;
     public const float RegionCell = 25f;
     public static readonly int W = (int)(Map.Width / Cell), H = (int)(Map.Height / Cell);
     public static readonly int RW = (int)(Map.Width / RegionCell), RH = (int)(Map.Height / RegionCell);
@@ -43,6 +43,9 @@ public sealed class CoastField
         new(0.50f, 0.46f, 0.44f),   // Volcanic: ash
         new(0.62f, 0.62f, 0.38f),   // Sargasso: weed gold
         new(0.52f, 0.50f, 0.64f),   // Siren's Ruins: lilac
+        new(0.60f, 0.68f, 0.74f),   // Ice Reach: cold grey-blue
+        new(0.30f, 0.42f, 0.46f),   // Maelstrom Straits: dark churning teal
+        new(0.40f, 0.74f, 0.70f),   // Corsair Keys: bright aquamarine
     };
 
     /// <summary>Watercolour for the land of each region.</summary>
@@ -57,6 +60,9 @@ public sealed class CoastField
         new(0.52f, 0.44f, 0.38f),   // Volcanic: umber and ash
         new(0.84f, 0.78f, 0.56f),   // Sargasso: bleached sand
         new(0.78f, 0.74f, 0.66f),   // Siren's Ruins: pale limestone
+        new(0.86f, 0.87f, 0.85f),   // Ice Reach: snow and grey scree
+        new(0.50f, 0.50f, 0.46f),   // Maelstrom Straits: dark basalt
+        new(0.90f, 0.82f, 0.62f),   // Corsair Keys: coral sand
     };
 
     public CoastField(Map map)

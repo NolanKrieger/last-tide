@@ -343,6 +343,35 @@ public sealed class InkBatch
             }
     }
 
+    /// <summary>A grid patch (as <see cref="Grid"/>) in one flat colour: shadow casters.</summary>
+    public void GridFlat(ReadOnlySpan<Vector2> p, int rows, int cols, Color col)
+    {
+        if (rows < 2 || cols < 2) return;
+        Grow(rows * cols, (rows - 1) * (cols - 1) * 6);
+        int s = nv;
+        for (int k = 0; k < rows * cols; k++) V(p[k], col);
+        for (int r = 0; r < rows - 1; r++)
+            for (int q = 0; q < cols - 1; q++)
+            {
+                int a = s + r * cols + q;
+                T(a, a + 1, a + cols + 1);
+                T(a, a + cols + 1, a + cols);
+            }
+    }
+
+    /// <summary>
+    /// Appends <paramref name="src"/>'s triangles moved by <paramref name="offset"/> in <paramref name="col"/>
+    /// (its alpha scaled by each vertex's own): the shadow a batch casts.
+    /// </summary>
+    public void AppendShadow(InkBatch src, Vector2 offset, Color col)
+    {
+        if (src.ni == 0) return;
+        Grow(src.nv, src.ni);
+        int s = nv;
+        for (int k = 0; k < src.nv; k++) V(src.pts[k] + offset, col with { A = col.A * src.cols[k].A });
+        for (int k = 0; k < src.ni; k++) idx[ni++] = src.idx[k] + s;
+    }
+
     /// <summary>Draws everything collected as one command on <paramref name="item"/> and clears.</summary>
     public void Flush(CanvasItem item, Texture2D? texture = null)
     {

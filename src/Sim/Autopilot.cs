@@ -14,7 +14,7 @@ public sealed class Autopilot
     public int Dest { get; private set; } = -1;
     public Good PlanGood { get; private set; } = Good.Provisions;
     public int PlanUnits { get; private set; }
-    public int Trades, Fights, Flights, Digs, Visits, Upgrades, HitsTaken;
+    public int Trades, Fights, Flights, Digs, Visits, Upgrades, HitsTaken, Contracts;
     public int MaxGold;
     public readonly Dictionary<string, int> Routes = new();   // "good:from>to" → count
     /// <summary>Diagnostics: one line per decision worth reading (balance harness, tests).</summary>
@@ -78,7 +78,7 @@ public sealed class Autopilot
             }
             if (State == Mode.Rescue) State = Mode.Idle;
         }
-        // ---- a beast: carpenters and pumps, guns when it shows itself, and away from it ----
+        // ---- a beast: carpenters first, guns when it shows itself, and away from it ----
         var beast = w.Monster;
         if (beast != null && beast.State != MonsterState.Faded && State != Mode.Fight && State != Mode.Flee)
         {
@@ -96,8 +96,8 @@ public sealed class Autopilot
                 if (Math.Abs(rel - Math.PI / 2) < Angles.Rad(24)) fireS = ship.CanFire(Side.Starboard);
                 if (Math.Abs(rel + Math.PI / 2) < Angles.Rad(24)) fireP = ship.CanFire(Side.Port);
             }
-            // Carpenters and pumps against a beast — but held by the Kraken the guns must be manned to cut her free:
-            // under "repair & pump" nobody serves them and a side takes 120 s to reload (audit C-13).
+            // Carpenters first against a beast — but held by the Kraken the guns must be manned to cut her free:
+            // under "repair" nobody serves them and a side takes 120 s to reload (audit C-13).
             int beastOrder = w.Pinned && beast.Type == MonsterType.Kraken ? 1 : 3;
             return Orders(w, bi with { FirePort = fireP, FireStarboard = fireS, Order = Order(beastOrder) });
         }
@@ -142,7 +142,7 @@ public sealed class Autopilot
                     if (fort.InHarbor(ship.Pos)) { State = Mode.Shelter; shelterPort = fort.Id; shelterTime = 0; Shelters++; }
                 }
                 bool night = w.IsNight;
-                int fleeOrder = ship.Leaks == 0 && ship.Water < 5 ? 2 : ship.Water > 25 ? 3 : 4;   // speed while dry; pumps once she is taking water
+                int fleeOrder = ship.Leaks == 0 && ship.Water < 5 ? 2 : ship.Water > 25 ? 3 : 4;   // speed while dry; carpenters first once she is taking water
                 return Orders(w, input with { Order = Order(fleeOrder), ToggleLantern = night && w.Lantern });
             }
         }
@@ -236,6 +236,7 @@ public sealed class Autopilot
     {
         if (here.Id == leftPort && w.Time - leftAt < 90) return false;   // just cast off from it
         if (here.Id == Dest || !w.Player.PortsVisited.Contains(here.Id)) return true;
+        foreach (var c in w.Player.Contracts) if (c.To == here.Id) return true;   // a delivery due here, on the way elsewhere
         var ship = w.Ship;
         if (w.Player.Gold < 25) return false;
         if (ship.HullHp < ship.MaxHp * 0.5 || ship.TornSails) return true;
@@ -327,10 +328,63 @@ public sealed class Autopilot
         lastProgressTime = w.Time;
     }
 
-    /// <summary>Picks where to go next: the best remembered trade from here, else somewhere unknown.</summary>
+    /// <summary>Picks where to go next: a contract's port when one is due, else the best remembered trade, else somewhere unknown.</summary>
     double lastPlanTime = -1e9;
 
     void Plan(World w, int avoid = -1)
+    {
+        PlanTrade(w, avoid);
+        // Contracts in hand come first: the earliest deadline, with the trade plan kept only if it goes there too.
+        Contract? due = null;
+        foreach (var c in w.Player.Contracts)
+            if (c.To != avoid && (w.Docked == null || c.To != w.Docked.Id) && (due == null || c.Deadline < due.Deadline)) due = c;
+        if (due == null || Dest == due.To) return;
+        PlanUnits = 0;
+        SetDest(w, due.To, Mode.Voyage);
+        Log?.Invoke($"day {w.DaysSurvived:0.00} contract: → {w.Map.Ports[due.To].Name} due {due.Deadline:0.00} pays {due.Pay}");
+    }
+
+    /// <summary>Days the autopilot expects a passage from the port she is in to take.</summary>
+    static double PassageDays(World w, Contract c) => w.SeaDistance(c.From, c.To) / (PlanSpeed * Tuning.SecondsPerDay);
+
+    static bool InTime(World w, Contract c) => PassageDays(w, c) * 1.3 + 0.2 < c.Deadline - w.DaysSurvived;
+
+    /// <summary>
+    /// The harbour office. With no trade worth making she takes the best-paying freight or dispatch on the board and
+    /// goes there; bound somewhere anyway, she signs whatever is bound there too. She does not smuggle.
+    /// </summary>
+    void OfficeWork(World w, Port port, bool chooseLeg)
+    {
+        var offers = w.ContractOffers(port);
+        if (chooseLeg && State == Mode.Explore && Dest >= 0)
+        {
+            // Only another market she has yet to learn, no farther than the one she was going to learn anyway: the
+            // yardstick's seamanship is the limit, and a paid passage it cannot make stalls it (seeds 11 and 12 sailed
+            // in circles for days round a harbour across a headland).
+            double reach = w.SeaDistance(port.Id, Dest);
+            int best = -1;
+            double bestRate = 0;
+            for (int i = 0; i < offers.Length; i++)
+            {
+                if (offers[i] is not { Kind: not ContractKind.Contraband } c || !InTime(w, c)) continue;
+                if (c.To != Dest && (w.Player.PortsVisited.Contains(c.To) || w.SeaDistance(c.From, c.To) > reach)) continue;
+                if (w.Player.SlotsUsed + c.Slots > w.Ship.CargoCapacity + 1e-9) continue;
+                double rate = c.Pay / (PassageDays(w, c) + 0.3);
+                if (rate > bestRate) { bestRate = rate; best = i; }
+            }
+            if (best >= 0) SetDest(w, offers[best]!.To, Mode.Explore);
+            return;
+        }
+        for (int i = 0; i < offers.Length; i++)
+            if (offers[i] is { Kind: not ContractKind.Contraband } c && c.To == Dest && InTime(w, c)
+                && w.Apply(new PortCommand(PortAction.SignContract, Amount: i)) == PortResult.Ok)
+            {
+                Contracts++;
+                Log?.Invoke($"day {w.DaysSurvived:0.00} signed {c.Kind} → {w.Map.Ports[c.To].Name} pays {c.Pay} ({c.Advance} now) due {c.Deadline:0.00}");
+            }
+    }
+
+    void PlanTrade(World w, int avoid)
     {
         lastPlanTime = w.Time;
         var ship = w.Ship;
@@ -533,9 +587,14 @@ public sealed class Autopilot
         int mustCrew = Math.Min(ship.Hull.CrewMax, Math.Max(2, ship.Hull.Riggers));
         while (ship.Crew < mustCrew && player.Gold > World.SigningFee + 20 && w.Apply(new PortCommand(PortAction.Hire, Amount: 1)) == PortResult.Ok) { }
         while (ship.Crew < wantCrew && player.Gold > World.SigningFee + Reserve + 300 && w.Apply(new PortCommand(PortAction.Hire, Amount: 1)) == PortResult.Ok) { }
+        // A cartographer as soon as she can pay for one: without him nothing new goes on the chart (no new markets).
+        if (!w.HasCartographer)
+            foreach (var o in w.TavernOfficers(port))
+                if (o.Type == OfficerType.Cartographer && player.Gold >= Officers.PriceOf(o.Type, o.Tier) + Reserve
+                    && w.Apply(new PortCommand(PortAction.HireOfficer, Amount: (int)o.Type * 10 + o.Tier)) == PortResult.Ok) break;
         // Upgrades when rich.
         while (ship.Cannons < ship.Hull.GunsPerSide * 2 && player.Gold > World.CannonPrice + 260 && w.Apply(new PortCommand(PortAction.BuyCannon)) == PortResult.Ok) Upgrades++;
-        foreach (var part in new[] { Part.Sails, Part.Rigging, Part.Hold, Part.Pumps, Part.Planking, Part.Copper, Part.Cannons, Part.Lantern })
+        foreach (var part in new[] { Part.Sails, Part.Rigging, Part.Hold, Part.Planking, Part.Copper, Part.Cannons, Part.Lantern })
         {
             if (ship.Grade(part) >= 5) continue;
             int price = w.PartPrice(part);
@@ -564,6 +623,7 @@ public sealed class Autopilot
         // The next leg.
         PlanFrom = port.Id;
         Plan(w);
+        OfficeWork(w, port, chooseLeg: true);
         if (PlanUnits > 0)
         {
             int units = PlanUnits;
@@ -571,6 +631,7 @@ public sealed class Autopilot
             PlanUnits = units;
             if (units > 0) boughtDay[PlanGood] = w.DaysSurvived;
         }
+        OfficeWork(w, port, chooseLeg: false);
         w.Apply(new PortCommand(PortAction.CastOff));
         leftPort = port.Id;
         leftAt = w.Time;

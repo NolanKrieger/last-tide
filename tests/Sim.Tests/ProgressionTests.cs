@@ -38,8 +38,6 @@ public class ProgressionTests
         Assert.Equal(180 + 28, w.Ship.Range, 6);
         Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.BuyPart, Amount: (int)Part.Copper)));
         Assert.Equal(0.12, w.Ship.LeakSaveChance, 6);
-        Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.BuyPart, Amount: (int)Part.Pumps)));
-        Assert.Equal(1.3, w.Ship.PumpMult, 6);
         Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.BuyPart, Amount: (int)Part.Ram)));
         Assert.Equal(1.25, w.Ship.RamDamageMult, 6);
         w.Player.Gold = 0;
@@ -47,10 +45,29 @@ public class ProgressionTests
     }
 
     [Fact]
-    public void BuyingAHullCarriesOverCannonsLanternAndPumpsAndTradesInTheRest()
+    public void AnOlderSaveDropsItsPumpsAndBilgeEngine()
+    {
+        // The pumps were the seventh of nine parts, and the bilge engine a black-market unique: both are gone.
+        var w = Docked();
+        w.Ship.Parts[(int)Part.Hold] = 2;
+        w.Ship.Parts[(int)Part.Lantern] = 3;
+        w.Player.Unique.Add("long_nines");
+        string json = w.SaveJson()
+            .Replace("\"Parts\":[0,0,0,0,0,0,2,3]", "\"Parts\":[0,0,0,0,0,0,4,2,3]")
+            .Replace("\"Unique\":[\"long_nines\"]", "\"Unique\":[\"bilge_engine\",\"long_nines\"]");
+        Assert.Contains("[0,0,0,0,0,0,4,2,3]", json);
+        Assert.Contains("bilge_engine", json);
+        var loaded = World.LoadJson(json);
+        Assert.Equal(2, loaded.Ship.Grade(Part.Hold));
+        Assert.Equal(3, loaded.Ship.Grade(Part.Lantern));
+        Assert.Equal(new[] { "long_nines" }, loaded.Player.Unique.ToArray());
+    }
+
+    [Fact]
+    public void BuyingAHullCarriesOverCannonsAndLanternAndTradesInTheRest()
     {
         var w = Docked();
-        foreach (var p in new[] { Part.Sails, Part.Cannons, Part.Lantern, Part.Pumps, Part.Planking })
+        foreach (var p in new[] { Part.Sails, Part.Cannons, Part.Lantern, Part.Planking })
             Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.BuyPart, Amount: (int)p)));
         Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.BuyCannon)));
         Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.BuyCannon)));
@@ -67,7 +84,6 @@ public class ProgressionTests
         Assert.Equal(4, w.Ship.Cannons);
         Assert.Equal(1, w.Ship.Grade(Part.Cannons));
         Assert.Equal(1, w.Ship.Grade(Part.Lantern));
-        Assert.Equal(1, w.Ship.Grade(Part.Pumps));
         Assert.Equal(0, w.Ship.Grade(Part.Sails));
         Assert.Equal(0, w.Ship.Grade(Part.Planking));
         Assert.Equal(w.Ship.MaxHp, w.Ship.HullHp, 6);
@@ -94,7 +110,7 @@ public class ProgressionTests
     {
         var w = Docked();
         var offer = w.TavernOfficers(w.Docked!);
-        Assert.Equal(3, offer.Count);
+        Assert.Equal(4, offer.Count);   // lookout, marines, quartermaster and the cartographer
         var look = offer.First(o => o.Type == OfficerType.Lookout);
         int gold = w.Player.Gold;
         Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.HireOfficer, Amount: (int)OfficerType.Lookout * 10 + look.Tier)));

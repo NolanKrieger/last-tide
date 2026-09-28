@@ -105,22 +105,27 @@ public sealed partial class World
         Player.Gold += HullRefund(hull) - price;   // trading down, the shipwright pays the difference
         var old = Ship;
         var fresh = new Ship(hull, old.Pos, old.Heading) { Id = old.Id, IsPlayer = true, Faction = old.Faction, Order = old.Order, Crew = Math.Min(old.Crew, hull.CrewMax) };
-        // Cannons move (grade and as many guns as the new hull has slots; extras are sold), with the lantern and the pumps.
+        // Cannons move (grade and as many guns as the new hull has slots; extras are sold), with the lantern.
         int slots = hull.GunsPerSide * 2;
         int extras = Math.Max(0, old.Cannons - slots);
         Player.Gold += extras * CannonPrice / 2;
         fresh.Cannons = Math.Min(old.Cannons, slots);
         fresh.Parts[(int)Part.Cannons] = old.Grade(Part.Cannons);
         fresh.Parts[(int)Part.Lantern] = old.Grade(Part.Lantern);
-        fresh.Parts[(int)Part.Pumps] = old.Grade(Part.Pumps);
         fresh.RefreshParts();
         fresh.HullHp = fresh.MaxHp;
         old.CustomStations.CopyTo(fresh.CustomStations, 0);
         Ship = fresh;
-        // Officers beyond the new berths go ashore first, so their effects go with them.
-        if (Player.Officers.Count > hull.OfficerSlots)
+        // Officers beyond the new berths go ashore first, so their effects go with them. The cartographer has a berth
+        // of his own on every hull and always stays.
+        if (Player.SlottedOfficers > hull.OfficerSlots)
         {
-            Player.Officers.RemoveRange(hull.OfficerSlots, Player.Officers.Count - hull.OfficerSlots);
+            int kept = 0;
+            for (int i = 0; i < Player.Officers.Count; i++)
+            {
+                if (!Officers.UsesSlot(Player.Officers[i].Type) || ++kept <= hull.OfficerSlots) continue;
+                Player.Officers.RemoveAt(i--);
+            }
             Notices.Enqueue("NOTICE_OFFICERS_ASHORE");
         }
         ApplyUnique();
@@ -145,7 +150,10 @@ public sealed partial class World
     }
 
     // ---- Officers (GDD §7) ----
-    /// <summary>The officers a tavern has on offer this visit: one of each type at a random tier.</summary>
+    /// <summary>
+    /// The officers a tavern has on offer this visit: one of each type at a random tier. The home port's tavern always
+    /// has a green cartographer, so the voyage's first purchase can be the chart (the run starts without one).
+    /// </summary>
     public List<Officer> TavernOfficers(Port port)
     {
         var rng = new Rng((ulong)(port.Id * 7919 + Day * 104729 + Seed));
@@ -155,6 +163,7 @@ public sealed partial class World
             double roll = rng.NextDouble();
             int tier = roll < 0.55 ? 0 : roll < 0.9 ? 1 : 2;
             if (port.Size == 0 && tier == 2) tier = 1;
+            if (t == OfficerType.Cartographer && port.Id == Map.StartPort.Id) tier = 0;
             list.Add(new Officer { Type = t, Tier = tier });
         }
         return list;
@@ -167,13 +176,14 @@ public sealed partial class World
         var offer = TavernOfficers(Docked).FirstOrDefault(o => o.Type == type);
         if (offer == null || offer.Tier != tier) return PortResult.Nothing;
         var existing = Player.OfficerOf(type);
-        if (existing == null && Player.Officers.Count >= Ship.Hull.OfficerSlots) return PortResult.CrewFull;
-        int price = Officers.Price[tier];
+        if (existing == null && Officers.UsesSlot(type) && Player.SlottedOfficers >= Ship.Hull.OfficerSlots) return PortResult.CrewFull;
+        int price = Officers.PriceOf(type, tier);
         if (price > Player.Gold) return PortResult.NoGold;
         Player.Gold -= price;
         if (existing != null) existing.Tier = tier;
         else Player.Officers.Add(new Officer { Type = type, Tier = tier });
         ApplyOfficers();
+        if (type == OfficerType.Cartographer) ChartAround();   // he starts with the harbour he signed on in
         return PortResult.Ok;
     }
 
@@ -190,12 +200,29 @@ public sealed partial class World
         VisionMult = look >= 0 ? 1 + Officers.LookoutVision[look] : 1;   // the lantern part widens only the lit night radius (VisionAt)
     }
 
+    /// <summary>A cartographer is aboard: the chart can be opened and what she sees is kept (Nolan, 2026-09-27).</summary>
+    public bool HasCartographer => Player.OfficerOf(OfficerType.Cartographer) != null;
+
+    /// <summary>How far round her the chart is inked: the vision radius × the cartographer's reach; 0 with none aboard.</summary>
+    public double ChartRadius => Player.OfficerTier(OfficerType.Cartographer) is >= 0 and var t ? VisionRadius * Officers.CartographerReach[t] : 0;
+
+    /// <summary>The cartographer inks the chart round her out to <see cref="ChartRadius"/> and marks the ports inside it.</summary>
+    void ChartAround()
+    {
+        double chart = ChartRadius;
+        if (chart <= 0) return;
+        Reveal.Paint(Ship.Pos, chart);
+        foreach (var port in Map.Ports)
+            if (!port.Discovered && port.Harbor.DistanceTo(Ship.Pos) <= chart + port.RingRadius)
+                Discover(port);
+    }
+
     public double WarningRange => Player.OfficerTier(OfficerType.Lookout) is >= 0 and var t ? Officers.LookoutWarning[t] : 0;
 
     public int OfficerWages()
     {
         int w = 0;
-        foreach (var o in Player.Officers) w += Officers.Wage[o.Tier];
+        foreach (var o in Player.Officers) w += Officers.WageOf(o.Type, o.Tier);
         return w;
     }
 

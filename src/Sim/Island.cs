@@ -8,8 +8,12 @@ public sealed class Island
     public readonly double BoundRadius;
     public int Id;
     public RegionType Region;
-    /// <summary>Nominal radius the blob was grown from.</summary>
+    /// <summary>Nominal radius the blob was grown from; on v6 maps, the radius of a circle of the same area.</summary>
     public double Radius;
+    /// <summary>The landform this island belongs to (v6 maps; null on older ones).</summary>
+    public Landform? Form;
+    /// <summary>Which landform on the map it was traced from: islands of one landform may lie a narrow gut apart.</summary>
+    public int Group = -1;
 
     public Island(Vec2[] points)
     {

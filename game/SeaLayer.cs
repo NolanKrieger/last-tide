@@ -13,6 +13,7 @@ public partial class SeaLayer : CanvasLayer
     ShaderMaterial material = null!;
     World? world;
     Vector2 drift;
+    float rippleClock, swellClock;
     float lastTime = -1;
     // The sim's wind and weather sampled on a world-locked grid around the view (see UpdateGrid).
     public const int GridW = 32, GridH = 20;
@@ -75,17 +76,18 @@ public partial class SeaLayer : CanvasLayer
     /// </summary>
     public static Vector2[] PlaceHubs(CoastField field)
     {
+        // One rose at the heart of the chart and a ring of eight round it (the shader draws at most nine).
         var nominal = new List<Vector2> { Vector2.Zero };
-        for (int k = 0; k < 4; k++)
+        for (int k = 0; k < 8; k++)
         {
-            float a = k * Mathf.Tau / 4 + 0.62f;
-            nominal.Add(new Vector2(Mathf.Cos(a) * 1900, Mathf.Sin(a) * 1450));
+            float a = k * Mathf.Tau / 8 + 0.4f;
+            nominal.Add(new Vector2(Mathf.Cos(a) * (float)Map.HalfW * 0.6f, Mathf.Sin(a) * (float)Map.HalfH * 0.6f));
         }
         var hubs = new List<Vector2>();
         foreach (var p in nominal)
         {
             Vector2? found = null;
-            for (float r = 0; r <= 600 && found == null; r += 25)
+            for (float r = 0; r <= 900 && found == null; r += 25)
             {
                 int n = Math.Max(1, (int)(r / 12));
                 for (int k = 0; k < n && found == null; k++)
@@ -108,6 +110,12 @@ public partial class SeaLayer : CanvasLayer
         // The strokes drift downwind at a third of the wind, accumulated here so a change of wind never makes the
         // whole pattern jump (it used to be time × speed, which slid the sea by metres whenever the wind freshened).
         drift += windDir * windSpeed * 0.35f * dt;
+        // The strokes' lives run quicker in a blow: a clock counted in periods, integrated so a change of pace never
+        // jumps the pattern (the shader used to divide the render time by a per-pixel period, which grew with the
+        // session until every gust edge shattered the strokes and every gust made them flicker).
+        float strength = Mathf.SmoothStep(1.5f, 14f, windSpeed);
+        rippleClock += dt / Mathf.Lerp(9f, 4.2f, strength);
+        swellClock += dt / Mathf.Lerp(14f, 7f, strength);
         material.SetShaderParameter("cam_pos", camMetres);
         material.SetShaderParameter("view_world", viewMetres);
         material.SetShaderParameter("screen_px", screenPx);
@@ -115,6 +123,8 @@ public partial class SeaLayer : CanvasLayer
         material.SetShaderParameter("ship_wind_speed", windSpeed);
         material.SetShaderParameter("time", time);
         material.SetShaderParameter("drift", drift);
+        material.SetShaderParameter("ripple_clock", rippleClock);
+        material.SetShaderParameter("swell_clock", swellClock);
         if (world == null) return;
         SimTime = (float)world.Time;
         UpdateGrid(camMetres, viewMetres);

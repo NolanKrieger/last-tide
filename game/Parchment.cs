@@ -488,8 +488,11 @@ public partial class UiCartouche : Control
 
     string title = "";
     public Font TitleFont = Fonts.Display;
-    public int FontSize = 40;
-    public float PlateHeight = 120;
+    int fontSize = 40;
+    float plateHeight = 120;
+    // Resizing the plate re-measures it: a stale minimum size left a shrunk plate drawn low in its old, taller rect.
+    public int FontSize { get => fontSize; set { fontSize = value; UpdateMinimumSize(); QueueRedraw(); } }
+    public float PlateHeight { get => plateHeight; set { plateHeight = value; UpdateMinimumSize(); QueueRedraw(); } }
     public float MaxWidth = 900;
     public Color Colour = Ink.Black;
 

@@ -31,8 +31,17 @@ public sealed class Player
     public readonly List<BottleMap> BottleMaps = new();
     public readonly List<CoveHint> CoveHints = new();
     public readonly List<Officer> Officers = new();
+    /// <summary>Harbour-office work in hand (at most <see cref="World.MaxContracts"/>); their crates take hold space.</summary>
+    public readonly List<Contract> Contracts = new();
+    /// <summary>Board slots already signed for (<see cref="World.OfferKey"/>): a signed offer does not come back that day.</summary>
+    public readonly HashSet<long> TakenOffers = new();
+    /// <summary>Crown bounties earned for pirates sunk and not yet claimed at a Crown port.</summary>
+    public int BountyOwed;
+    public int BountyShips;
     public Officer? OfficerOf(OfficerType t) => Officers.FirstOrDefault(o => o.Type == t);
     public int OfficerTier(OfficerType t) => OfficerOf(t)?.Tier ?? -1;
+    /// <summary>Officers filling the hull's officer slots: the cartographer has his own berth and is not counted.</summary>
+    public int SlottedOfficers => Officers.Count(o => Sim.Officers.UsesSlot(o.Type));
 
     public int Units(Good g) => Cargo[(int)g];
 
@@ -108,6 +117,7 @@ public sealed class Player
             double s = 0;
             for (int i = 0; i < Goods.Count; i++)
                 s += Cargo[i] * Goods.All[i].SlotsPerUnit;
+            foreach (var c in Contracts) s += c.Slots;   // sealed crates take their room like any cargo
             return s;
         }
     }

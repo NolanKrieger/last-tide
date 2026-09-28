@@ -39,7 +39,6 @@ public sealed partial class World
         StealthBonus = HasUnique("ghost_sails") ? 0.3 : 0;
         Ship.PointMult = HasUnique("smugglers_keel") ? 0.95 : 1;
         Ship.RangeBonus = HasUnique("long_nines") ? 40 : 0;
-        Ship.PumpUnique = HasUnique("bilge_engine") ? 1.5 : 1;
         Ship.HoldMult = HasUnique("hidden_hold") ? 1.15 : 1;
         Ship.RefreshParts();
     }
@@ -95,11 +94,12 @@ public sealed partial class World
         {
             if (map.Solved) continue;
             var site = Map.Treasures[map.Treasure];
+            if (site.IslandId >= Map.Islands.Count) continue;   // a test's sea with the islands cleared
             var island = Map.Islands[site.IslandId];
             if (Ship.Pos.DistanceTo(island.Centre) <= island.BoundRadius + MatchRange)
             {
                 map.Solved = true;
-                Reveal.Paint(site.Pos, 40);
+                if (HasCartographer) Reveal.Paint(site.Pos, 40);   // the X goes on the chart only if someone keeps one
                 Notices.Enqueue("NOTICE_MAP_MATCHED");
             }
         }

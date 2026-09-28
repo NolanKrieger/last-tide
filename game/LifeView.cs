@@ -403,18 +403,22 @@ public partial class RegionLetters : Node2D
         }
     }
 
+    /// <summary>Stands in for a region beyond the chart's edge.</summary>
+    const RegionType Beyond = (RegionType)(-1);
+
     public static string Spaced(string s) => string.Join(' ', s.ToUpperInvariant().ToCharArray()).Replace("   ", " ");
 
     public override void _Process(double delta)
     {
         bool paused = (GetParent()?.GetParent() as Main)?.Paused ?? false;
         if (!paused) age += (float)delta;
-        var here = world.Map.RegionAt(world.Ship.Pos).Type;
+        // Past the chart's edge there is no region, only the open sea and what lives in it.
+        var here = Map.BeyondEdge(world.Ship.Pos) > 0 ? Beyond : world.Map.RegionAt(world.Ship.Pos).Type;
         if (here != current)
         {
             bool first = current == null;
             current = here;
-            text = Spaced(Text.Get("REGION_" + RegionDef.Of(here).Key));
+            text = Spaced(here == Beyond ? Text.Get("SEA_BEYOND_CHART") : Text.Get("REGION_" + RegionDef.Of(here).Key));
             // ahead of her bow and a little to one side, lying along her course
             var fwd = Vec2.FromAngle(world.Ship.Heading);
             var side = new Vec2(-fwd.Y, fwd.X);

@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace LastTide.Sim;
 
 /// <summary>
@@ -40,4 +42,17 @@ public static class Noise
     }
 
     public static double Value2(int seed, double x, double y) => Value3(seed, x, y, 0.5);
+
+    /// <summary>True 2D value noise (four lattice points, not eight): the coastline generator's workhorse. Sim-only, no shader twin.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public static double Value2D(int seed, double x, double y)
+    {
+        double fx = Math.Floor(x), fy = Math.Floor(y);
+        int x0 = (int)fx, y0 = (int)fy;
+        double ux = Fade(x - fx), uy = Fade(y - fy);
+        double c00 = Lattice(x0, y0, 0, seed), c10 = Lattice(x0 + 1, y0, 0, seed);
+        double c01 = Lattice(x0, y0 + 1, 0, seed), c11 = Lattice(x0 + 1, y0 + 1, 0, seed);
+        double a = c00 + (c10 - c00) * ux, b = c01 + (c11 - c01) * ux;
+        return a + (b - a) * uy;
+    }
 }

@@ -13,11 +13,13 @@ uniform vec2 cam_pos = vec2(0.0);             // metres at the screen centre (+y
 uniform vec2 view_world = vec2(800.0, 450.0); // metres visible across and down the screen
 uniform vec2 screen_px = vec2(1600.0, 900.0);
 uniform vec2 map_half = vec2(3000.0, 2250.0);
-uniform float time = 0.0;          // render clock (s): stroke lives, surf
+uniform float time = 0.0;          // render clock (s): crests, surf
+uniform float ripple_clock = 0.0;  // stroke lives, counted in ripple periods (SeaLayer integrates the wind's pace)
+uniform float swell_clock = 0.0;   // ... and in swell periods
 uniform vec2 ship_wind_dir = vec2(1.0, 0.0);
 uniform float ship_wind_speed = 8.0;
 uniform vec2 drift = vec2(0.0);    // accumulated downwind drift of the strokes (m)
-uniform sampler2D sdf : filter_linear, repeat_disable;            // signed coast distance (m), 6.25 m texels
+uniform sampler2D sdf : filter_linear, repeat_disable;            // signed coast distance (m), 8 m texels
 uniform sampler2D water_tint : filter_linear, repeat_disable;     // blurred regional water colour
 uniform sampler2D land_tint : filter_linear, repeat_disable;      // blurred regional land colour
 uniform sampler2D reveal : filter_linear, repeat_disable;         // the chart's ink (skip work under blank paper)
@@ -32,6 +34,13 @@ uniform int region_deep = 2;       // RegionType.Deep, darker water
 
 vec2 map_uv(vec2 w) { return (w + map_half) / (2.0 * map_half); }
 vec2 grid_uv(vec2 w) { return (w / grid_step + 0.5) / grid_texels; }
+
+// ---- Beyond the chart: no edge, no neatline. The sea runs on, colder and darker the further out, the water nobody
+// has charted (the whirlpools and the beasts out there are the sim's) ----
+float beyond_chart(vec2 w) {
+	vec2 e = abs(w) - map_half;
+	return max(e.x, e.y);                       // metres beyond the chart's edge; negative inside
+}
 
 // ---- Hand-inked strokes ----
 
@@ -52,44 +61,81 @@ float quill(vec2 d, vec2 ax, float len, float amp, float bend, float phase, floa
 	return cov * pen * smoothstep(1.0 + px / len, 0.9, abs(s));
 }
 
+// The sea at one stroke's cell: every pixel of a stroke reads the same wind, so a stroke stays one piece where the wind
+// varies across it (read per pixel, the wind cut strokes into fragments along every gust edge).
+struct SeaCell { vec2 dir; float strength; float gust; float calm; float near; };
+
+SeaCell sea_cell(vec2 w) {
+	SeaCell s;
+	vec2 guv = grid_uv(w);
+	vec4 wg = texture(wind_grid, guv);
+	vec2 dir = wg.rg * 2.0 - 1.0;
+	s.dir = dot(dir, dir) > 1e-4 ? normalize(dir) : ship_wind_dir;
+	s.strength = smoothstep(1.5, 14.0, wg.b * 30.0);
+	s.gust = wg.a;
+	s.calm = texture(cond_grid, guv).r;
+	float d = 1000.0;
+	if (has_field) {
+		d = texture(sdf, map_uv(w)).r;
+		if (beyond_chart(w) > 0.0) { d = max(d, 400.0 + beyond_chart(w)); }
+	}
+	s.near = smoothstep(4.0, 28.0, d);   // strokes thin out in the lee of the land
+	return s;
+}
+
 // A layer of wave strokes on a world-aligned grid: static in (w - drift) space so they drift downwind without the grid
 // ever rotating; each cell's stroke is born (the pen draws it tail to head), lingers, fades, then is reborn elsewhere.
 // Strokes stay within 0.45 of a cell of their centre (jittered 0.3–0.7), so only the 4 nearest cells can reach a
 // pixel: a 2×2 search. Two hashes a cell, no trig for the stroke's heading (a small-angle nudge off the wind).
-float wave_layer(vec2 w, vec2 dir, float cell, float len, float amp, float width, float density, float period, float salt, float px) {
+// A stroke's life runs on `clock` (periods of the wind's pace, integrated on the CPU), never on time / period: with a
+// period that varies by pixel or by gust, that quotient grows with the session and shattered and flickered the strokes.
+float wave_layer(vec2 w, bool swell, float cell, float clock, float salt, float px) {
 	vec2 q = w - drift;
 	vec2 id0 = floor(q / cell - 0.5);
-	vec2 perp = vec2(-dir.y, dir.x);
 	float cov = 0.0;
 	float lmax = cell * 0.45;
 	for (int j = 0; j <= 1; j++) {
 		for (int i = 0; i <= 1; i++) {
 			vec2 id = id0 + vec2(float(i), float(j));
 			vec3 h0 = hash3(id, salt);
-			float per = period * (0.75 + 0.5 * h0.x);
-			float ph = time / per + h0.y;
+			float ph = clock / (0.75 + 0.5 * h0.x) + h0.y;
 			float cyc = floor(ph);
 			float life = ph - cyc;
-			if (fract(h0.z * 97.31 + cyc * 0.6180339) > density) { continue; }
+			// the pick and the stroke's place need no wind: rule a cell out before reading the sea there
+			float pick = fract(h0.z * 97.31 + cyc * 0.6180339);
+			if (swell && pick > 0.65) { continue; }   // above the swell's densest
 			vec3 h1 = hash3(id + vec2(cyc * 37.0, cyc * 11.0), salt + 1.0);
 			vec2 centre = (id + 0.3 + 0.4 * h1.xy) * cell;
-			vec2 ax = normalize(dir + perp * ((h1.z - 0.5) * 0.35));
+			float reach = lmax + (swell ? 4.9 : 1.8) + px * 2.0;   // longest stroke + widest bend + widest pen
+			vec2 dq = q - centre;
+			if (dot(dq, dq) > reach * reach) { continue; }
+			SeaCell s = sea_cell((id + 0.5) * cell + drift);
+			float st = s.strength;
+			float density = swell
+				? mix(0.22, 0.6, st) * s.near * (1.0 - 0.6 * s.calm)
+				: mix(0.07, 0.9, st) * (0.8 + 0.45 * s.gust) * (1.0 - 0.8 * s.calm) * s.near;
+			// a soft cut, so a stroke fades rather than blinks when a gust moves the density past it mid-life
+			float keep = smoothstep(pick - 0.05, pick + 0.05, density);
+			if (keep <= 0.0) { continue; }
+			float len = swell ? mix(23.0, 16.0, st) : mix(5.4, 3.8, st);
+			float amp = swell ? mix(2.2, 3.4, st) : mix(0.45, 1.05, st);
+			float width = swell ? mix(0.30, 0.42, st) + px * 0.25 : mix(0.26, 0.34, st);
+			vec2 ax = normalize(s.dir + vec2(-s.dir.y, s.dir.x) * ((h1.z - 0.5) * 0.35));
 			float r2 = fract(h1.x * 13.7 + h1.y * 7.3);
 			float l = min(len * (0.65 + 0.7 * r2), lmax);
 			float drawn = smoothstep(0.0, 0.22, life);
 			float fade = 1.0 - smoothstep(0.62, 1.0, life);
-			float c = quill(q - centre, ax, l, amp * (0.6 + 0.7 * h1.z), 0.55 + 0.5 * h0.x, (h0.z - 0.5) * 1.2, width, drawn, px);
-			cov = max(cov, c * fade * (0.65 + 0.35 * r2));
+			float c = quill(dq, ax, l, amp * (0.6 + 0.7 * h1.z), 0.55 + 0.5 * h0.x, (h0.z - 0.5) * 1.2, width, drawn, px);
+			cov = max(cov, c * fade * keep * (0.65 + 0.35 * r2));
 		}
 	}
 	return cov;
 }
 
 // Curling crests (whitecaps): short arches bowed downwind that swell up and vanish; only in strong wind.
-float crest_layer(vec2 w, vec2 dir, float cell, float density, float px) {
+float crest_layer(vec2 w, float cell, float px) {
 	vec2 q = w - drift * 1.3;
 	vec2 id0 = floor(q / cell - 0.5);
-	vec2 ay = vec2(-dir.y, dir.x);
 	float cov = 0.0;
 	for (int j = 0; j <= 1; j++) {
 		for (int i = 0; i <= 1; i++) {
@@ -99,8 +145,15 @@ float crest_layer(vec2 w, vec2 dir, float cell, float density, float px) {
 			float cyc = floor(ph);
 			float life = ph - cyc;
 			vec3 h1 = hash3(id + vec2(cyc * 13.0, cyc * 7.0), 92.0);
-			if (h1.z > density) { continue; }
+			if (h1.z > 0.65) { continue; }   // above the crests' densest
 			vec2 d = q - (id + 0.3 + 0.4 * h1.xy) * cell;
+			if (dot(d, d) > (4.6 + px * 2.0) * (4.6 + px * 2.0)) { continue; }   // beyond the widest arch
+			SeaCell sc = sea_cell((id + 0.5) * cell + drift * 1.3);
+			float density = smoothstep(0.6, 0.95, sc.strength) * 0.6 * sc.near;
+			float keep = smoothstep(h1.z - 0.05, h1.z + 0.05, density);
+			if (keep <= 0.0) { continue; }
+			vec2 dir = sc.dir;
+			vec2 ay = vec2(-dir.y, dir.x);
 			float x = dot(d, ay), y = dot(d, dir);
 			float len = 1.6 + 1.4 * h1.x;
 			float s = x / len;
@@ -108,7 +161,7 @@ float crest_layer(vec2 w, vec2 dir, float cell, float density, float px) {
 			float yc = 0.55 * len * (1.0 - s * s) - 0.35 * len;
 			float hw = max(0.13 * (1.0 - s * s * 0.7), px * 0.35);
 			float a = 1.0 - smoothstep(hw - px * 0.5, hw + px * 0.5, abs(y - yc));
-			cov = max(cov, a * smoothstep(1.05, 0.8, abs(s)) * sin(life * PI));
+			cov = max(cov, a * smoothstep(1.05, 0.8, abs(s)) * sin(life * PI) * keep);
 		}
 	}
 	return cov;
@@ -139,24 +192,6 @@ vec4 rhumbs(vec2 w, float px) {
 	return acc;
 }
 
-// ---- The chart's edge: a strong neatline, a thin graduated scale band (alternate bars every 100 m, like a chart's
-// latitude border) and a fine inner rule; a blank margin beyond ----
-vec4 neatline(vec2 w, float px) {
-	vec2 e = abs(w) - map_half;                // > 0 outside the chart
-	float outside = max(e.x, e.y);
-	if (outside > 0.0) { return vec4(SHADE * 0.97, 1.0); }
-	float inner = -outside;                    // metres inside the edge
-	float lw = max(px * 0.6, 0.35);
-	float a = 1.0 - smoothstep(lw * 2.2, lw * 2.2 + px, inner);             // the neatline
-	a = max(a, 1.0 - smoothstep(lw, lw + px, abs(inner - 7.0)));             // the band's inner edge
-	a = max(a, (1.0 - smoothstep(lw * 0.7, lw * 0.7 + px, abs(inner - 12.5))) * 0.6);   // a fine rule inside it
-	if (inner > 2.0 && inner < 7.0) {
-		float along = e.x > e.y ? w.y : w.x;   // alternate filled bars every 100 m along the edge
-		a = max(a, step(0.5, fract(along / 200.0)) * 0.8);
-	}
-	return vec4(INK, a * 0.85);
-}
-
 void fragment() {
 	vec2 w = cam_pos + (SCREEN_UV - 0.5) * view_world;
 	float px = view_world.x / screen_px.x;     // metres per screen pixel
@@ -166,11 +201,16 @@ void fragment() {
 	float inked = 1.0;
 	vec3 wt = vec3(0.55, 0.66, 0.66);
 	int region = 0;
+	float out_of_chart = beyond_chart(w);
 	if (has_field) {
 		vec2 uv = map_uv(w);
 		d = texture(sdf, uv).r;
 		wt = texture(water_tint, uv).rgb;
 		inked = texture(reveal, uv).r;
+		if (out_of_chart > 0.0) {
+			d = max(d, 400.0 + out_of_chart);      // open ocean: the clamped edge texels hold no coast
+			inked = 1.0;                            // the fog layer decides what she can see out there
+		}
 	}
 
 	if (inked < 0.02) {
@@ -201,13 +241,10 @@ void fragment() {
 		vec2 guv = grid_uv(w);
 		vec4 wg = texture(wind_grid, guv);
 		vec4 cg = texture(cond_grid, guv);
-		vec2 dir = wg.rg * 2.0 - 1.0;
-		dir = dot(dir, dir) > 1e-4 ? normalize(dir) : ship_wind_dir;
 		float spd = wg.b * 30.0;
 		float gust = wg.a;
 		float calm = cg.r;
 		float strength = smoothstep(1.5, 14.0, spd);
-		float near = smoothstep(4.0, 28.0, d);     // strokes thin out in the lee of the land
 		float deep = smoothstep(90.0, 320.0, d);
 
 		// regional water tint (faint everywhere), deeper and cooler offshore, gust patches darken the water
@@ -220,22 +257,17 @@ void fragment() {
 		vec4 rh = rhumbs(w, px);
 		col = mix(col, rh.rgb, rh.a * (0.5 + 0.5 * smoothstep(20.0, 120.0, d)));
 
-		// wave strokes: denser, shorter, busier and quicker with the wind; two interleaved ripple layers
+		// wave strokes: denser, shorter, busier and quicker with the wind; each stroke reads the wind at its own cell
 		float ripple_fade = 1.0 - smoothstep(0.45, 1.05, px);
-		float dens = mix(0.07, 0.9, strength) * (0.8 + 0.45 * gust) * (1.0 - 0.8 * calm) * near;
-		float rl = mix(5.4, 3.8, strength);
-		float ramp = mix(0.45, 1.05, strength);
-		float rwid = mix(0.26, 0.34, strength);
-		float rper = mix(9.0, 4.2, strength);
+		float shore = smoothstep(2.0, 10.0, d);    // a stroke from an offshore cell never runs into the surf
 		float ripple = 0.0;
 		if (ripple_fade > 0.0) {
-			ripple = wave_layer(w, dir, 12.0, rl, ramp, rwid, dens, rper, 0.0, px) * ripple_fade;
+			ripple = wave_layer(w, false, 12.0, ripple_clock, 0.0, px) * ripple_fade * shore;
 		}
-		float swell = wave_layer(w, dir, 52.0, mix(23.0, 16.0, strength), mix(2.2, 3.4, strength), mix(0.30, 0.42, strength) + px * 0.25,
-			mix(0.22, 0.6, strength) * near * (1.0 - 0.6 * calm), mix(14.0, 7.0, strength), 3.0, px);
+		float swell = wave_layer(w, true, 52.0, swell_clock, 3.0, px) * shore;
 		float crest = 0.0;
-		if (strength > 0.6 && ripple_fade > 0.0) {
-			crest = crest_layer(w, dir, 19.0, smoothstep(0.6, 0.95, strength) * 0.6 * near, px) * ripple_fade;
+		if (strength > 0.45 && ripple_fade > 0.0) {   // the cells decide; this only skips calm water
+			crest = crest_layer(w, 19.0, px) * ripple_fade * shore;
 		}
 		vec3 wave_ink = mix(SEPIA, INK, 0.5 + 0.5 * strength);
 		col = mix(col, wave_ink, ripple * (0.55 + 0.15 * strength) + swell * (0.22 + 0.12 * (1.0 - ripple_fade)) + crest * 0.55);
@@ -272,8 +304,10 @@ void fragment() {
 		}
 	}
 
-	vec4 nl = neatline(w, px);
-	col = mix(col, nl.rgb, nl.a);
+	if (out_of_chart > 0.0) {
+		float far = smoothstep(0.0, 2800.0, out_of_chart);
+		col = mix(col, col * vec3(0.70, 0.76, 0.86), far * 0.55);
+	}
 
 	// a soft vignette so the view reads as a page
 	vec2 uv = SCREEN_UV - 0.5;

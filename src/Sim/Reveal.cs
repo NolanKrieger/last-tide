@@ -61,14 +61,29 @@ public sealed class RevealMask
         return added;
     }
 
-    /// <summary>Inks every cell whose centre falls in the region (the home region starts charted).</summary>
+    /// <summary>
+    /// Inks every cell whose centre falls in the region (the home region starts charted). Asked block by block (4 × 4
+    /// cells): a block whose corners all agree is inked or skipped whole, only blocks a border crosses cell by cell.
+    /// </summary>
     public void PaintRegion(Map map, RegionType type)
     {
-        for (int y = 0; y < H; y++)
-            for (int x = 0; x < W; x++)
+        const int B = 4;
+        bool In(int x, int y) => map.RegionAt(new Vec2(-Map.HalfW + (x + 0.5) * Cell, -Map.HalfH + (y + 0.5) * Cell)).Type == type;
+        for (int by = 0; by < H; by += B)
+            for (int bx = 0; bx < W; bx += B)
             {
-                var c = new Vec2(-Map.HalfW + (x + 0.5) * Cell, -Map.HalfH + (y + 0.5) * Cell);
-                if (map.RegionAt(c).Type == type) Set(x, y);
+                int x1 = Math.Min(W, bx + B) - 1, y1 = Math.Min(H, by + B) - 1;
+                bool a = In(bx, by), b = In(x1, by), c = In(bx, y1), d = In(x1, y1);
+                if (a == b && b == c && c == d)
+                {
+                    if (!a) continue;
+                    for (int y = by; y <= y1; y++)
+                        for (int x = bx; x <= x1; x++) Set(x, y);
+                    continue;
+                }
+                for (int y = by; y <= y1; y++)
+                    for (int x = bx; x <= x1; x++)
+                        if (In(x, y)) Set(x, y);
             }
     }
 

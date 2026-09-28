@@ -115,7 +115,9 @@ public partial class Main
             deserted = hud.NoticeShown == Text.Get("NOTICE_DESERTED");   // the ribbon the HUD paints (hud branch)
         }
         Check(heldInPort && !world.IsDocked && deserted, $"GC-25 the desertion notice raised on docking is kept for the sea, not lost under the port screen (held {heldInPort}, shown {deserted})");
+        Check(!world.HasCartographer, "GC-25 unpaid, the cartographer walks off with the other officers");
         world.Ship.Crew = crewBefore;   // the deserters come back for the checks that fire guns
+        world.Player.Officers.Add(new Officer { Type = OfficerType.Cartographer, Tier = 0 });   // and he for the chart checks
         await ToOpenWater();
 
         // GC-26: Esc in the chart's pin note abandons the pin instead of trapping the keys (M and Esc did nothing).
@@ -353,7 +355,7 @@ public partial class Main
         var need = new List<string>();
         foreach (var g in Goods.All) need.Add("GOOD_" + g.Key);
         foreach (var h in Hulls.All) need.Add("HULL_" + h.Id);
-        foreach (var r in RegionDef.All) need.Add("REGION_" + r.Key);
+        foreach (var r in RegionDef.All) { need.Add("REGION_" + r.Key); need.Add("REGION_IN_" + r.Key); }
         foreach (var f in Enum.GetValues<Faction>()) need.Add("FACTION_" + f.ToString().ToLowerInvariant());
         foreach (var r in Enum.GetValues<PortResult>()) if (r != PortResult.Ok) need.Add("PORT_RESULT_" + r.ToString().ToUpperInvariant());
         foreach (var w in new[] { "scarce", "short", "steady", "plenty", "glut" }) need.Add("STOCK_" + w);
@@ -382,7 +384,7 @@ public partial class Main
         foreach (var k in (string[])typeof(LogbookScreen).GetField("RowKeys", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!) need.Add("LOGBOOK_" + k);
         var missing = need.Where(k => !Text.Has(k)).Distinct().ToList();
         Check(missing.Count == 0, $"GC-29 every table row the game names has its strings ({need.Count} checked; missing: {string.Join(", ", missing)})");
-        var tokens = need.Select(Text.Get).Concat(new[] { "HUD_DOCK", "HUD_DIG", "HUD_DIG_FURL", "HUD_SALVAGE", "HUD_SALVAGE_FURL", "CHART_HINT", "CREW_NOTE", "HUD_HINTS", "HUD_GUN_Q", "HUD_GUN_E" }.Select(Text.Get))
+        var tokens = need.Select(Text.Get).Concat(new[] { "HUD_DOCK", "HUD_DIG", "HUD_DIG_FURL", "HUD_SALVAGE", "HUD_SALVAGE_FURL", "CHART_KEYS_CLOSE", "CREW_NOTE", "HUD_HINTS", "HUD_GUN_Q", "HUD_GUN_E" }.Select(Text.Get))
             .Where(t => t.Contains("[[")).ToList();
         Check(tokens.Count == 0, $"GC-11 every [[Action]] token names a real action ({string.Join(" | ", tokens)})");
 

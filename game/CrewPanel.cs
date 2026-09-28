@@ -13,17 +13,20 @@ public partial class CrewPanel : CanvasLayer
     Font font = null!;
     Control root = null!;
     UiSheet sheet = null!;
-    Label title = null!, orderLine = null!, note = null!, closeHint = null!;
+    Label title = null!, orderLine = null!, note = null!, closeHint = null!, officersLine = null!, noCartographer = null!;
     readonly Label[] names = new Label[4], counts = new Label[4];
     readonly UiFigures[] figures = new UiFigures[4];
     readonly Button[] plus = new Button[3], minus = new Button[3];
     readonly Button[] orders = new Button[4];
-    static readonly string[] Keys = { "STATION_GUNS", "STATION_SAILS", "STATION_REPAIR", "STATION_PUMPS" };
-    static readonly string[] Icons = { "station-guns", "station-sails", "station-repair", "station-pumps" };
+    static readonly string[] Keys = { "STATION_GUNS", "STATION_SAILS", "STATION_REPAIR", "STATION_SPARE" };
+    static readonly string[] Icons = { "ui/station-guns", "ui/station-sails", "ui/station-repair", "people/sailor" };
     public bool IsOpen => Visible;
     public UiFigures Figures(int station) => figures[station];
     public Button Plus(int station) => plus[station];
     public Button OrderButton(int order) => orders[order];
+    /// <summary>The officers aboard as listed, and whether the no-cartographer warning shows (the self-test reads both).</summary>
+    public string OfficersText => officersLine.Text;
+    public bool NoCartographerShown => noCartographer.Visible;
 
     public void Init(World w, Font f)
     {
@@ -70,7 +73,7 @@ public partial class CrewPanel : CanvasLayer
         {
             var row = Parchment.Row(12);
             col.AddChild(row);
-            row.AddChild(Parchment.Picture(Parchment.Tex(Icons[i]), 52, 48));
+            row.AddChild(Parchment.Picture(Art.Tex(Icons[i]), 52, 48));
             var text = Parchment.Column(0);
             text.CustomMinimumSize = new Vector2(150, 0);
             row.AddChild(text);
@@ -93,6 +96,15 @@ public partial class CrewPanel : CanvasLayer
             else row.AddChild(new Control { CustomMinimumSize = new Vector2(92, 0) });
         }
         col.AddChild(new UiDivider(false, 8));
+        // The officers aboard (the cartographer in his own berth), and a warning while none keeps the chart.
+        officersLine = Parchment.L("", "Head");
+        officersLine.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        officersLine.CustomMinimumSize = new Vector2(640, 0);
+        col.AddChild(officersLine);
+        noCartographer = Parchment.L(Text.Get("CREW_NO_CARTOGRAPHER"), "Warn");
+        noCartographer.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        noCartographer.CustomMinimumSize = new Vector2(640, 0);
+        col.AddChild(noCartographer);
         note = Parchment.L(Text.Get("CREW_NOTE"), "Flavour");
         note.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         note.CustomMinimumSize = new Vector2(640, 0);
@@ -153,6 +165,10 @@ public partial class CrewPanel : CanvasLayer
         }
         closeHint.Text = Text.Get("CREW_CLOSE");
         note.Text = Text.Get("CREW_NOTE");
+        var aboard = world.Player.Officers.OrderBy(o => o.Type == OfficerType.Cartographer ? 0 : 1)
+            .Select(o => Text.Get("CREW_OFFICER_ITEM", Text.Get("OFFICER_" + o.Type.ToString().ToLowerInvariant()), Text.Get("TIER_" + Officers.TierKey[o.Tier]))).ToList();
+        officersLine.Text = aboard.Count == 0 ? Text.Get("CREW_OFFICERS_NONE") : Text.Get("CREW_OFFICERS", string.Join(" · ", aboard));
+        noCartographer.Visible = !world.HasCartographer;
         for (int i = 0; i < 3; i++)
         {
             minus[i].Disabled = st[i] <= 0;

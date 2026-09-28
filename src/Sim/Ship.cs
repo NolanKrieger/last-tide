@@ -9,7 +9,7 @@ public enum Side { Port = 0, Starboard = 1 }
 /// <param name="SailDelta">Steps to raise (+) or lower (−) the sail this tick.</param>
 /// <param name="FirePort">Fire the port broadside this tick.</param>
 /// <param name="FireStarboard">Fire the starboard broadside this tick.</param>
-/// <param name="Order">1–4 sets a crew order (Battle, Make sail, Repair &amp; pump, Balanced); 0 keeps it.</param>
+/// <param name="Order">1–4 sets a crew order (Battle, Make sail, Repair, Balanced); 0 keeps it.</param>
 /// <param name="ToggleLantern">Douse or light the lantern (M6).</param>
 /// <param name="Action">The context action (dig, salvage) (M9).</param>
 /// <param name="Spyglass">The spyglass is raised (it inks the chart and spots ports, so it is logged like the helm).</param>
@@ -48,7 +48,6 @@ public sealed class Ship
     public void RefreshParts()
     {
         CannonGrade = Grade(Part.Cannons);
-        PumpMult = (1 + 0.3 * Grade(Part.Pumps)) * PumpUnique;
         LeakSaveChance = 0.12 * Grade(Part.Copper);
         RamDamageMult = 1 + 0.25 * Grade(Part.Ram);
         RamSelfMult = 1 - 0.12 * Grade(Part.Ram);
@@ -64,16 +63,14 @@ public sealed class Ship
     public int CannonGrade;                         // 0 = 4-pdr … 5 = 24-pdr
     public readonly bool[] Loaded = { true, true };
     public readonly double[] Reload = { 0, 0 };
-    public int Leaks;
+    public int Leaks;                               // holes the carpenters must plug before they can patch
     public double Water;                            // 0–100
     public double CarpenterWork;
     public double PatchWork;                        // HP patched since the last plank was used
     public int Timber = 4;                          // an AI crew's planks; the player's come from the hold
-    public double PumpMult = 1, LeakSaveChance = 0, RamDamageMult = 1, RamSelfMult = 1;   // parts (M8)
+    public double LeakSaveChance = 0, RamDamageMult = 1, RamSelfMult = 1;   // parts (M8)
     public bool Foundering, Sunk, WaterOnlyStand;
     public double Hourglass;
-    /// <summary>Seconds of glass granted for pumping hands so far this stand (0–15): more hands later add the rest (R-02).</summary>
-    public double StandBonus;
     /// <summary>Set for a tick while her carpenters hack at a gripping Kraken's tentacle instead of patching (not saved:
     /// the grip sets it again before the damage tick).</summary>
     public bool Hacking;
@@ -85,9 +82,9 @@ public sealed class Ship
     public double DamageMult = 1;                   // Threat scaling for director spawns: damage and hull (GDD §11)
     public double SpeedMult = 1;                    // the Sargasso weed (GDD §5)
     /// <summary>Grades 0–5 per part (GDD §7). CannonGrade mirrors Parts[Cannons].</summary>
-    public readonly int[] Parts = new int[9];
+    public readonly int[] Parts = new int[8];
     public readonly int[] CustomStations = new int[4];   // when Order is Custom
-    public double PointMult = 1, RangeBonus = 0, PumpUnique = 1, HoldMult = 1;   // black-market parts (GDD §10)
+    public double PointMult = 1, RangeBonus = 0, HoldMult = 1;   // black-market parts (GDD §10)
 
     // Readouts from the last step, for the HUD, the view and tests.
     public double AngleOffWindDeg { get; private set; } = 180;
@@ -135,6 +132,15 @@ public sealed class Ship
     /// <summary>Speed and turn penalty from water in the hold: up to half at 100% (GDD §8).</summary>
     public double WaterFactor => 1 - 0.5 * Water / 100;
 
+    /// <summary>The flood line (GDD §8): below this share of her hull the water rises, above it she drains.</summary>
+    public const double FloodLine = 0.6;
+    /// <summary>Water, % a second, for the whole hull's distance from the flood line: 1%/s for every 10% of hull.</summary>
+    public const double FloodRate = 10;
+    /// <summary>Seconds of glass in a last stand.</summary>
+    public const double StandGlass = 35;
+    /// <summary>Water, % a second, at her present hull: + rising below the flood line, − draining above it.</summary>
+    public double FloodPerSecond => FloodRate * (FloodLine - HullHp / MaxHp);
+
     /// <summary>Seconds a side takes to reload with every gun manned (4-pdr 12 s, +2 s a grade).</summary>
     public double BaseReload => 12 + 2 * CannonGrade;
 
@@ -153,15 +159,15 @@ public sealed class Ship
     /// (audit R-01), so crewing the guns after a broadside speeds the one under way.</summary>
     public double ReloadTime => BaseReload / Manning;
 
-    /// <summary>Hands per station under the current order: guns, sails, repair, pumps (GDD §7).</summary>
+    /// <summary>Hands per station under the current order: guns, sails, repair, and the spare hands (GDD §7).</summary>
     public int[] Stations()
     {
-        Split(out int guns, out int sails, out int repair, out int pumps);
-        return new[] { guns, sails, repair, pumps };
+        Split(out int guns, out int sails, out int repair, out int spare);
+        return new[] { guns, sails, repair, spare };
     }
 
     /// <summary><see cref="Stations"/> without an array (it runs several times a ship a tick: audit R-04).</summary>
-    public void Split(out int guns, out int sails, out int repair, out int pumps)
+    public void Split(out int guns, out int sails, out int repair, out int spare)
     {
         int left = Crew;
         int needGuns = Cannons, needSails = Hull.Riggers, needRepair = Math.Max(1, (int)(MaxHp / 100));
@@ -172,17 +178,17 @@ public sealed class Ship
             Take(ref guns, ref left, Math.Min(needGuns, CustomStations[0]));
             Take(ref sails, ref left, Math.Min(needSails, CustomStations[1]));
             Take(ref repair, ref left, Math.Min(needRepair, CustomStations[2]));
-            pumps = left;
+            spare = left;
             return;
         }
         switch (Order)
         {
             case CrewOrder.Battle: Take(ref guns, ref left, needGuns); Take(ref sails, ref left, needSails); Take(ref repair, ref left, needRepair); break;
             case CrewOrder.MakeSail: Take(ref sails, ref left, needSails); Take(ref guns, ref left, needGuns); Take(ref repair, ref left, needRepair); break;
-            case CrewOrder.Repair: Take(ref repair, ref left, needRepair); Take(ref sails, ref left, Math.Max(1, needSails / 2)); break;   // the rest pump
+            case CrewOrder.Repair: Take(ref repair, ref left, needRepair); Take(ref sails, ref left, Math.Max(1, needSails / 2)); break;   // carpenters first
             default: Take(ref sails, ref left, needSails); Take(ref guns, ref left, needGuns); Take(ref repair, ref left, needRepair); break;
         }
-        pumps = left;
+        spare = left;
     }
 
     /// <summary>A ball or a ram struck: hull damage, leaks at every 10% lost, a chance of a casualty.</summary>
@@ -201,21 +207,20 @@ public sealed class Ship
         if (by != null) LastHitBy = by;
     }
 
-    /// <summary>Hull gone or water at the gunwales starts the last stand (GDD §8); pumping hands lengthen the glass.</summary>
-    void CheckFoundering(int pumps)
+    /// <summary>Hull gone or water at the gunwales starts the last stand (GDD §8).</summary>
+    void CheckFoundering()
     {
         if (Foundering || Sunk || (HullHp > 0 && Water < 100)) return;
         Foundering = true;
         WaterOnlyStand = HullHp > 0;
-        StandBonus = Math.Min(15, pumps * 3);
-        Hourglass = 20 + StandBonus;
+        Hourglass = StandGlass;
         Loaded[0] = Loaded[1] = false;
     }
 
-    /// <summary>Reloads, water, pumps, carpenters and the last stand, once a tick (GDD §8).</summary>
+    /// <summary>Reloads, water, carpenters and the last stand, once a tick (GDD §8).</summary>
     public void DamageTick(double dt, Func<bool> takeTimber)
     {
-        Split(out int gunners, out _, out int carpenters, out int pumps);
+        Split(out int gunners, out _, out int carpenters, out _);
         double manning = Cannons > 0 ? Math.Clamp(gunners / (double)Cannons, 0.1, 1) : 1;
         for (int s = 0; s < 2; s++)
             if (!Loaded[s])
@@ -224,10 +229,9 @@ public sealed class Ship
                 if (Reload[s] <= 0) Loaded[s] = true;
             }
         if (RamCooldown > 0) RamCooldown -= dt;
-        CheckFoundering(pumps);
-        Water += Leaks * 1.0 * dt;
-        Water -= pumps * 0.2 * PumpMult * dt;
-        Water = Math.Clamp(Water, 0, 100);
+        CheckFoundering();
+        // The water follows the hull: it rises below the flood line and drains above it, faster the farther she is from it.
+        Water = Math.Clamp(Water + FloodPerSecond * dt, 0, 100);
         if (Leaks > 0)
         {
             CarpenterWork += carpenters * dt / 8.0;
@@ -241,7 +245,8 @@ public sealed class Ship
         {
             CarpenterWork = 0;
             double cap = MaxHp * 0.7;
-            if (carpenters > 0 && HullHp < cap && !Foundering && !Hacking)
+            // A stand for water alone can still be patched out of: above the flood line she drains (GDD §8).
+            if (carpenters > 0 && HullHp < cap && (!Foundering || (WaterOnlyStand && HullHp > 0)) && !Hacking)
             {
                 double patch = Math.Min(1.0 * dt, cap - HullHp);
                 if (PatchWork <= 0 && !takeTimber())
@@ -253,17 +258,10 @@ public sealed class Ship
             }
         }
         Hacking = false;
-        CheckFoundering(pumps);
+        CheckFoundering();
         if (Foundering)
         {
-            // Hands sent to the pumps during the stand still lengthen the glass, up to 35 s in all (§8; audit R-02).
-            double bonus = Math.Min(15, pumps * 3);
-            if (bonus > StandBonus)
-            {
-                Hourglass += bonus - StandBonus;
-                StandBonus = bonus;
-            }
-            // Shot to pieces during a stand for water, she is foundering for her hull now: pumping out no longer saves
+            // Shot to pieces during a stand for water, she is foundering for her hull now: draining no longer saves
             // her and the logbook says what sank her (audit R-11).
             if (WaterOnlyStand && HullHp <= 0) WaterOnlyStand = false;
             Hourglass -= dt;

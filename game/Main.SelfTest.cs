@@ -95,6 +95,14 @@ public partial class Main
         for (int i = 0; i < 16; i++) strings &= Text.Has("PT_" + i);
         foreach (var h in Hulls.All) strings &= Text.Has("HULL_" + h.Id);
         Check(strings, "every HUD line, sail level, point of sail, watch, compass point and hull has a string");
+        bool office = true;
+        foreach (var d in ContractDef.All)
+            foreach (var k in new[] { "CONTRACT_", "PORT_OFFER_CARGO_", "PORT_CONTRACT_DETAIL_" }) office &= Text.Has(k + d.Key);
+        foreach (var k in new[] { "RECEIPT_SURVEY", "RECEIPT_DELIVERED", "RECEIPT_SMUGGLED", "RECEIPT_BOUNTY", "RECEIPT_CAUGHT", "PORT_RESULT_BUSY", "NOTICE_BOUNTY",
+                     "NOTICE_CONTRACT_LATE", "NOTICE_SEARCH_CLEAR", "NOTICE_SEARCH_CAUGHT", "PORT_TAB_OFFICE", "CHART_KEY_CONTRACT" })
+            office &= Text.Has(k);
+        Check(office && Hud.NoticeLine("NOTICE_BOUNTY|120") == Text.Get("NOTICE_BOUNTY", 120) && Hud.KindOf("NOTICE_BOUNTY|120") == NoticeKind.Good,
+            "every harbour-office line has a string, and a notice with a value is lettered with it");
 
         // W raises the sail a step per press, clamped at full; S lowers it.
         long t0 = world.Ticks;
@@ -169,6 +177,59 @@ public partial class Main
         await Frames(5);
         Check(!paused && world.Ticks > tp, "Esc again resumes");
 
+        // No cartographer aboard (the voyage starts without one; Nolan, 2026-09-27): M leaves the chart shut and the HUD
+        // says why; she still sees the sea round her, but nothing new is inked. The home tavern signs a green one on.
+        Check(!world.HasCartographer && world.ChartRadius == 0, "the voyage starts with no cartographer aboard");
+        var blank = world.Map.Regions.OrderByDescending(r => r.Seed.DistanceTo(world.Map.StartPort.Harbor)).Select(r => world.SeaPointNear(r.Seed, 0, 400)).First();
+        world.Ship.Pos = blank;
+        world.Ship.Vel = Vec2.Zero;
+        prevPose = curPose = (blank, world.Ship.Heading);
+        camPos = Ink.V(blank);
+        int inkedBefore = world.Reveal.RevealedCells;
+        await Frames(10);
+        Check(world.Reveal.RevealedCells == inkedBefore && !world.Reveal.IsRevealed(blank), "sailing uncharted water with no cartographer inks nothing");
+        var sightAt = new Vector2((float)world.Ship.Pos.X, (float)world.Ship.Pos.Y);
+        Check(fog.SightNow.Radius > 0 && Mathf.Abs(fog.SightNow.Radius - (float)world.VisionRadius) < 1f && fog.SightNow.At.DistanceTo(sightAt) < 30f
+              && fog.SeaDrawsAt(world.Ship.Pos) && fog.SeaDrawsAt(world.Ship.Pos + new Vec2(world.VisionRadius * 0.9, 0)) && !fog.SeaDrawsAt(world.Ship.Pos + new Vec2(world.VisionRadius + 200, 0)),
+            $"but the fog clears her live sight and the sea draws inside it ({fog.SightNow.Radius:0} m)");
+        Tap(Godot.Key.M);
+        await Frames(2);
+        Check(!chartScreen.IsOpen && !Paused, "M with no cartographer aboard leaves the chart shut");
+        await Until(() => hud.NoticeShown == Text.Get("NOTICE_NO_CARTOGRAPHER"), 90);
+        Check(hud.NoticeShown == Text.Get("NOTICE_NO_CARTOGRAPHER"), $"and the HUD says why ({hud.NoticeShown})");
+        Tap(Godot.Key.M);
+        await Frames(1);
+        Check(!chartScreen.IsOpen && !world.Notices.Contains("NOTICE_NO_CARTOGRAPHER"), "a second press opens nothing and queues no second notice");
+        var homePort = world.Map.StartPort;
+        int sailWas = world.Ship.SailTarget;
+        double canvasWas = world.Ship.SailFraction;
+        world.Ship.Pos = homePort.Harbor;
+        world.Ship.Vel = Vec2.Zero;
+        world.Ship.SailTarget = 0;
+        world.Ship.SailFraction = 0;
+        prevPose = curPose = (homePort.Harbor, world.Ship.Heading);
+        await Frames(2);
+        Tap(Godot.Key.F);
+        await Frames(2);
+        Click(portScreen.Tabs[2]);
+        await Frames(2);
+        var hireCart = portScreen.OfficerHireButton(OfficerType.Cartographer);
+        Check(world.IsDocked && portScreen.Page == 2 && hireCart.IsVisibleInTree() && !hireCart.Disabled
+              && hireCart.Text == Text.Get("PORT_OFFICER_HIRE", Officers.PriceOf(OfficerType.Cartographer, 0)), $"the home tavern offers a green cartographer ({hireCart.Text})");
+        Click(hireCart);
+        await Frames(1);
+        Check(world.HasCartographer && world.Player.OfficerTier(OfficerType.Cartographer) == 0 && world.ChartRadius > 0, "Hire (clicked) signs him on");
+        Tap(Godot.Key.Escape);
+        await Frames(2);
+        profile.DeleteSuspend();   // that dock autosaved; the title checks below start with no saved voyage
+        world.Ship.Pos = open;
+        world.Ship.Vel = Vec2.Zero;
+        world.Ship.SailTarget = sailWas;          // the checks below expect her under the canvas she had
+        world.Ship.SailFraction = canvasWas;
+        prevPose = curPose = (open, world.Ship.Heading);
+        camPos = Ink.V(open);
+        await Frames(2);
+
         // M opens the chart and stops the clock; a click drops a pin; right-click removes it; M closes.
         Tap(Godot.Key.M);
         await Frames(2);
@@ -176,6 +237,8 @@ public partial class Main
         await Frames(5);
         Check(chartScreen.IsOpen && world.Ticks == tc, "M opens the chart and the sim waits");
         var chartCanvas = chartScreen.Canvas;
+        float openZoom = chartCanvas.Zoom;
+        Check(openZoom > 1.3f && chartCanvas.View.HasPoint(chartCanvas.ToScreen(world.Ship.Pos)), $"the chart opens framed on the charted sea with the ship on it, not on the whole blank sheet (zoom {openZoom:0.00})");
         var pinScreen = chartCanvas.ToScreen(world.Ship.Pos + new Vec2(300, 200));
         Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = pinScreen, GlobalPosition = pinScreen });
         Push(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = pinScreen, GlobalPosition = pinScreen });
@@ -191,20 +254,28 @@ public partial class Main
         Push(new InputEventMouseMotion { Position = homeOnChart, GlobalPosition = homeOnChart });
         Check(chartCanvas.Hover == world.Map.StartPort, "hovering a port on the chart brings up its ledger card");
         Tap(Godot.Key.Equal);
-        Check(chartCanvas.Zoom > 1.2f, $"+ zooms the chart in ({chartCanvas.Zoom:0.00})");
+        Check(chartCanvas.Zoom > openZoom * 1.2f, $"+ zooms the chart in ({chartCanvas.Zoom:0.00})");
         var probe = chartCanvas.ToScreen(world.Ship.Pos);
         Tap(Godot.Key.Left);
         Check(chartCanvas.ToScreen(world.Ship.Pos).X > probe.X + 20, "the arrow keys pan the chart");
+        float offCentre = chartCanvas.ToScreen(world.Ship.Pos).DistanceTo(chartCanvas.View.GetCenter());
+        Tap(Godot.Key.Space);
+        Check(chartCanvas.ToScreen(world.Ship.Pos).DistanceTo(chartCanvas.View.GetCenter()) < offCentre - 20, "Space brings the ship back to the middle of the chart");
         Tap(Godot.Key.Minus);
-        Check(Mathf.IsEqualApprox(chartCanvas.Zoom, 1f), "− zooms back out");
+        Check(Mathf.IsEqualApprox(chartCanvas.Zoom, openZoom), "− zooms back out");
         Tap(Godot.Key.M);
         await Frames(3);
         Check(!chartScreen.IsOpen && world.Ticks > tc, "M closes the chart and the clock runs again");
 
         // Running aground: aim at the nearest island and hold on; she stops outside it and the HUD says so.
-        var island = world.Islands.OrderBy(i => i.Centre.DistanceTo(world.Ship.Pos)).First(i => i.Radius >= 60);
+        // A solid island (an atoll's middle is lagoon) in plain water, approached from 60 m off its real shore: a
+        // landform island need not be round, so its bounding circle can lie far from the coast.
+        var island = world.Islands.OrderBy(i => i.Centre.DistanceTo(world.Ship.Pos))
+            .First(i => i.Radius >= 60 && i.Contains(i.Centre) && i.Region is not (RegionType.Maelstrom or RegionType.IceReach));
         var toIsland = (island.Centre - world.Ship.Pos).Normalized;
-        world.Ship.Pos = island.Centre - toIsland * (island.BoundRadius + 60);
+        var shore = island.Centre;
+        while (island.Contains(shore - toIsland * 5)) shore -= toIsland * 5;
+        world.Ship.Pos = shore - toIsland * 60;
         world.Ship.Heading = toIsland.Angle;
         world.Ship.Vel = toIsland * 8;
         world.Wind.SetFixed(Angles.Wrap(toIsland.Angle), Tuning.StandardWind);   // wind astern, so she keeps driving in
@@ -219,6 +290,26 @@ public partial class Main
         Check(!island.Contains(world.Ship.Pos), "the hull is held outside the coastline");
         Check(world.Ship.Speed < 2, $"she is stopped against the shore ({world.Ship.Speed:F1} m/s)");
 
+        // No edge to the world: from just inside the chart's east edge, W to full sail and a wind astern carry her out
+        // past it, where the HUD names the water uncharted (GDD §5 "Beyond the chart").
+        bool beastsWere = world.MonstersEnabled;
+        world.MonstersEnabled = false;   // the beasts out there are the sim tests' business; this is the helm's
+        world.Ship.Pos = new Vec2(Map.HalfW - 60, 0);
+        world.Ship.Vel = new Vec2(4, 0);
+        world.Ship.Heading = 0;
+        world.Wind.SetFixed(0, Tuning.StandardWind);
+        world.Ship.SailTarget = 0;
+        world.Ship.SailFraction = 0;
+        prevPose = curPose = (world.Ship.Pos, world.Ship.Heading);
+        camPos = Ink.V(world.Ship.Pos);
+        for (int k = 0; k < 3; k++) Tap(Godot.Key.W);
+        for (int i = 0; i < 30 * 30 && Map.BeyondEdge(world.Ship.Pos) < 60; i++)
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        await Frames(3);
+        Check(Map.BeyondEdge(world.Ship.Pos) >= 60, $"she sails on past the chart's edge (x {world.Ship.Pos.X:F0}, edge {Map.HalfW})");
+        Check(hud.WeatherText.StartsWith(Text.Get("REGION_beyond")), $"out there the HUD calls it uncharted ({hud.WeatherText})");
+        world.MonstersEnabled = beastsWere;
+
         Check(world.Ship.Order == CrewOrder.Balanced, "the crew starts on the balanced order");
         Check(hud.ThreatText == Text.Get("TIER_flat_calm"), $"the Threat bar names the first tier ({hud.ThreatText})");
 
@@ -229,6 +320,10 @@ public partial class Main
         world.Ship.Pos = OpenWater(600);
         world.Ship.Heading = Angles.FromCompassDeg(0);
         world.Ship.Vel = Vec2.Zero;
+        // The hover checks below point through the camera: after the jump from beyond the chart's edge it was still easing
+        // across the sea when they aimed, so the pointer missed her (flaky "her own ship shows her card").
+        prevPose = curPose = (world.Ship.Pos, world.Ship.Heading);
+        camPos = Ink.V(world.Ship.Pos);
         // Furled, so she lies still beside the dummy: under load several ticks run per frame and, with canvas set, she
         // gathered way before the shot and the broadside passed ahead of a target lying still (flaky "takes the broadside").
         world.Ship.SailTarget = 0;
@@ -251,10 +346,24 @@ public partial class Main
             hitDummy |= dummy.HullHp < hpDummy;
         }
         Check(hitDummy, "the ship abeam takes the broadside");
+        // Hover: the pointer on a ship in sight rings her and shows her card; her own ship answers too; open water, nothing.
+        var dummyAt = GetCanvasTransform() * Ink.V(dummy.Pos);
+        Push(new InputEventMouseMotion { Position = dummyAt, GlobalPosition = dummyAt });
+        await Frames(2);
+        Check(shipCard.Hovered == dummy && shipCard.Text.Contains(world.NameOf(dummy)) && shipCard.Text.Contains(Text.Get("SHIPCARD_BOUNTY", world.Bounty(dummy)))
+              && shipCard.Text.Contains(Text.Get("SHIPCARD_HOSTILE")), $"the pointer on a ship in sight shows her card: name, stance, bounty ({shipCard.Text.Replace('\n', '/')})");
+        var ownAt = GetCanvasTransform() * Ink.V(world.Ship.Pos);
+        Push(new InputEventMouseMotion { Position = ownAt, GlobalPosition = ownAt });
+        await Frames(2);
+        Check(shipCard.Hovered == world.Ship && shipCard.Text.Contains(world.Player.ShipName), "her own ship shows her card");
+        var openAt = ownAt + new Vector2(-260, 0);
+        Push(new InputEventMouseMotion { Position = openAt, GlobalPosition = openAt });
+        await Frames(2);
+        Check(shipCard.Hovered == null, "open water under the pointer shows no card");
         Check(hud.GunGauge.Munitions == world.Player.Units(Good.Munitions), "the HUD counts the shot left");
         Tap(Godot.Key.Key3);
         await Frames(2);
-        Check(world.Ship.Order == CrewOrder.Repair, "3 orders repair and pump");
+        Check(world.Ship.Order == CrewOrder.Repair, "3 orders repair");
         Tap(Godot.Key.Key1);
         await Frames(2);
         Check(world.Ship.Order == CrewOrder.Battle, "1 orders battle stations");
@@ -301,7 +410,7 @@ public partial class Main
         await Frames(2);
         Check(world.PlayerSees(brig.Pos) && hud.MarkerFor(brig.Id) is { Reported: false } bm2 && !purse.HasPoint(bm2.At),
             $"a hostile hidden under a HUD plate is marked beside it ({brig.Pos.DistanceTo(world.Ship.Pos):0} m)");
-        world.Player.Officers.Clear();
+        world.Player.Officers.RemoveAll(o => o.Type == OfficerType.Lookout);   // the cartographer stays: the Shoals below are charted as she arrives
         world.ApplyOfficers();
         world.Others.Remove(brig);
         await Frames(2);
@@ -506,7 +615,7 @@ public partial class Main
         await Frames(2);
         // Only the make-sail note is due here: earlier notes may already have fired (the test's own timing decides which),
         // and a random voyage can put a raider or a storm near the start.
-        foreach (var k in new[] { "wind_rose", "irons", "tack", "dock", "trade", "hostile", "leak", "night", "threat", "chart", "spyglass", "storm" })
+        foreach (var k in new[] { "wind_rose", "irons", "tack", "dock", "trade", "hostile", "leak", "night", "threat", "cartographer", "chart", "spyglass", "storm" })
             profile.MarkHint(k);
         profile.HintsSeen.Remove("first_sail");   // the dig above sits furled long enough to show it in slow runs (audit R-11)
         hintsView.Bind(world);
@@ -676,6 +785,9 @@ public partial class Main
         Check(world.Player.Gold == goldNow - quoted && world.Player.Units(cheapest) == unitsBefore + 3, "Buy (clicked) charges exactly that total");
         Click(portScreen.SellButton);
         Check(world.Player.Units(cheapest) == unitsBefore, "Sell (clicked) sells them back");
+        Click(portScreen.MaxButton);
+        Check((int)portScreen.Quantity.Value == (int)portScreen.Quantity.MaxValue && portScreen.Quantity.MaxValue > 3, $"max sets the quantity to all she can buy or holds ({portScreen.Quantity.Value})");
+        portScreen.Quantity.Value = 1;
         Tap(Godot.Key.E);
         await Frames(1);
         Check(portScreen.Page == 1 && portScreen.FocusOnPage(1), "E turns to the next page of the ledger, and the keyboard follows it");
@@ -696,6 +808,40 @@ public partial class Main
         Check(portScreen.Page == 2, "the tavern tab shows");
         var offer = world.TavernOfficers(home).First(o => o.Type == OfficerType.Lookout);
         Check(portScreen.Do(new PortCommand(PortAction.HireOfficer, Amount: (int)OfficerType.Lookout * 10 + offer.Tier)) == PortResult.Ok && world.Player.Officers.Count == 1, "a lookout signs on");
+        await Frames(1);
+        var cartHire = portScreen.OfficerHireButton(OfficerType.Cartographer);
+        bool slotFull = world.Player.SlottedOfficers >= world.Ship.Hull.OfficerSlots && portScreen.OfficerHireButton(OfficerType.Quartermaster).Disabled;
+        Click(cartHire);
+        await Frames(1);
+        Check(slotFull && world.HasCartographer && world.Player.Officers.Count == 2 && world.Player.SlottedOfficers == 1,
+            $"with the cutter's one officer slot taken, a cartographer (clicked) still signs on in his own berth (slot full {slotFull}, officers {world.Player.Officers.Count})");
+        // The harbour office: its tab, a contract signed and given up by clicking, the board following.
+        Click(portScreen.Tabs[3]);
+        await Frames(1);
+        Check(portScreen.Page == 3 && portScreen.FocusOnPage(3), "the harbour office tab (clicked) opens its page");
+        var board = world.ContractOffers(home);
+        int onBoard = Array.FindIndex(board, c => c != null);
+        Check(onBoard >= 0, "the home port's office has work on its board");
+        if (onBoard >= 0)
+        {
+            int goldSign = world.Player.Gold;
+            Click(portScreen.SignButton(onBoard));
+            await Frames(1);
+            Check(world.Player.Contracts.Count == 1 && world.Player.Gold == goldSign + board[onBoard]!.Advance && !portScreen.SignButton(onBoard).IsVisibleInTree(),
+                "Sign (clicked) takes the contract and its advance, and the offer leaves the board");
+            var held = world.Player.Contracts[0];
+            Check(shipCard.DescribeForTest(world.Ship).Contains(Text.Get("PORT_CONTRACT_LINE", Text.Get("CONTRACT_" + ContractDef.Of(held.Kind).Key), world.Map.Ports[held.To].Name, Parchment.DayWatch(held.Deadline))),
+                "her own ship's card lists the delivery in hand and its day");
+            Click(portScreen.AbandonButton(0));
+            await Frames(1);
+            Check(world.Player.Contracts.Count == 1 && portScreen.AbandonButton(0).Text == Text.Get("PORT_CONFIRM"), "Give up asks once more before it acts");
+            Click(portScreen.AbandonButton(0));
+            await Frames(1);
+            Check(world.Player.Contracts.Count == 0 && world.Player.Gold == goldSign, "Give up (clicked twice) hands the contract and its advance back");
+        }
+        Tap(Godot.Key.E);
+        await Frames(1);
+        Check(portScreen.Page == 0, "E turns from the harbour office back round to the market");
         await Frames(170);
         Check(hud.NoticeShown != Text.Get("NOTICE_DESERTED"), "a notice raised in port waits behind the panel");
         Tap(Godot.Key.Escape);
@@ -727,6 +873,15 @@ public partial class Main
         Check(dark > 150 && dark < samples / 2, $"the frame has ink on parchment ({dark} dark of {samples} sampled pixels)");
         if (screenshotPath != null)
             img.SavePng(screenshotPath);
+
+        // Last: a fullscreen round trip leaves synthetic clicks missing their controls until the real mouse moves again.
+        Tap(Godot.Key.F11);
+        await Frames(3);
+        Check(settings.Fullscreen && DisplayServer.WindowGetMode() == DisplayServer.WindowMode.Fullscreen && Settings.Load("user://selftest/").Fullscreen, "F11 goes fullscreen and saves it");
+        Push(new InputEventKey { Keycode = Godot.Key.Enter, PhysicalKeycode = Godot.Key.Enter, AltPressed = true, Pressed = true });
+        Push(new InputEventKey { Keycode = Godot.Key.Enter, PhysicalKeycode = Godot.Key.Enter, AltPressed = true, Pressed = false });
+        await Frames(3);
+        Check(!settings.Fullscreen && DisplayServer.WindowGetMode() != DisplayServer.WindowMode.Fullscreen && !Settings.Load("user://selftest/").Fullscreen, "Alt+Enter goes back to a window");
 
         GD.Print(failures.Count == 0 ? "SELFTEST PASS" : $"SELFTEST FAIL ({failures.Count})");
         ExitGame(failures.Count == 0 ? 0 : 1);

@@ -15,7 +15,7 @@ namespace LastTide;
 public partial class ChartView : Node2D
 {
     ChartChunk[] chunks = Array.Empty<ChartChunk>();
-    const int Cols = 6, Rows = 5;
+    const int Cols = 18, Rows = 15;   // 1 × 0.9 km chunks: a few ms to build each
     public CoastField Field { get; private set; } = null!;
     Map map = null!;
 
@@ -60,7 +60,13 @@ public partial class ChartView : Node2D
             AddChild(chunks[i]);
         }
         foreach (var island in map.Islands)
-            chunks[ChunkOf(island.Centre)].Islands.Add(island);
+        {
+            // A chunk reaches as far as its islands do (a great island is kilometres across), so it is built in time.
+            var chunk = chunks[ChunkOf(island.Centre)];
+            chunk.Islands.Add(island);
+            float r = (float)island.BoundRadius * Ink.PxPerM;
+            chunk.Bounds = chunk.Bounds.Merge(new Rect2(new Vector2((float)island.Centre.X, (float)island.Centre.Y) * Ink.PxPerM - new Vector2(r, r), new Vector2(2 * r, 2 * r)));
+        }
         foreach (var port in map.Ports)
             if (!port.Secret) chunks[ChunkOf(port.Harbor)].Ports.Add(port);
         foreach (var island in map.Islands)
@@ -340,6 +346,9 @@ public static class ChartArt
         [RegionType.Volcanic] = new Flora[] { new("lava-rocks", 6, 2.5f), new("dead-tree", 10, 1.8f), new("fern", 5, 0.8f), new("rocks", 5, 0.8f), new("tuft", 3.5f, 0.8f) },
         [RegionType.Sargasso] = new Flora[] { new("dune", 5, 2.5f), new("palm-lean", 12, 1.5f), new("tuft", 4, 2.5f), new("palm", 13, 1), new("rocks", 5, 0.8f) },
         [RegionType.SirenRuins] = new Flora[] { new("palm", 13, 1.6f), new("tuft", 4, 1.6f), new("rocks", 5, 1), new("column", 10, 1.2f), new("fallen-columns", 5, 1.2f), new("ruined-wall", 7, 0.8f), new("obelisk", 12, 0.35f), new("statue", 10, 0.3f), new("altar", 5, 0.4f), new("stone-head", 6, 0.25f) },
+        [RegionType.IceReach] = new Flora[] { new("conifers", 13, 2.4f), new("conifer", 12, 2), new("slate-rocks", 6, 2), new("knoll", 7, 1.4f), new("heather", 5, 0.8f), new("rocks", 5, 1) },
+        [RegionType.Maelstrom] = new Flora[] { new("slate-rocks", 6, 2.4f), new("bent-tree", 10, 2), new("knoll", 7, 1.2f), new("heather", 5, 1.2f), new("rocks", 6, 1.2f), new("dead-tree", 10, 0.5f) },
+        [RegionType.CorsairKeys] = new Flora[] { new("palm-lean", 12, 2.5f), new("palm", 13, 2), new("palm-pair", 13, 1.2f), new("tuft", 4, 2.5f), new("dune", 5, 1.5f), new("rocks", 5, 0.6f) },
     };
 
     /// <summary>The one big landmark an island gets near its heart, if it is large enough (name, height m, min inland m).</summary>
@@ -354,6 +363,9 @@ public static class ChartArt
         [RegionType.Volcanic] = new[] { ("volcano", 44f) },
         [RegionType.Sargasso] = new[] { ("dune", 7f), ("hill", 9f) },
         [RegionType.SirenRuins] = new[] { ("colonnade", 15f), ("arch", 11f), ("stone-head", 8f) },
+        [RegionType.IceReach] = new[] { ("peaks", 20f), ("crag", 18f) },
+        [RegionType.Maelstrom] = new[] { ("crag", 18f), ("ruin-tower", 13f) },
+        [RegionType.CorsairKeys] = new[] { ("hill", 9f), ("dune", 7f) },
     };
 
     /// <summary>Where an island's volcano stands (its most inland point), for the smoke; null if too small.</summary>
@@ -370,13 +382,13 @@ public static class ChartArt
         var c = V(island.Centre);
         float best = float.MaxValue;
         var at = c;
-        float r = (float)island.BoundRadius;
-        for (float y = -r; y <= r; y += 6)
-            for (float x = -r; x <= r; x += 6)
+        float r = (float)island.BoundRadius, step = Mathf.Max(6, r / 60);
+        for (float y = -r; y <= r; y += step)
+            for (float x = -r; x <= r; x += step)
             {
                 var q = c + new Vector2(x, y);
                 float d = field.DistanceAt(q);
-                if (d < best) { best = d; at = q; }
+                if (d < best && island.Contains(new Vec2(q.X, q.Y))) { best = d; at = q; }
             }
         return (at, -best);
     }
@@ -414,13 +426,13 @@ public static class ChartArt
         }
 
         // Then the cover: dart-throwing with a clustering field, sized to the island.
-        float area = Mathf.Pi * r * r * 0.6f;
-        int want = Math.Clamp((int)(area / 230f), 3, 420);
+        float area = island.Form == null ? Mathf.Pi * r * r * 0.6f : (float)Coastlines.Area(island.Points);
+        int want = Math.Clamp((int)(area / 230f), 3, 1500);
         for (int tries = 0; tries < want * 5 && placed.Count < want; tries++)
         {
             var p = c + new Vector2((float)rng.Range(-r, r), (float)rng.Range(-r, r));
             float d = field.DistanceAt(p);
-            if (d > -4.5f) continue;
+            if (d > -4.5f || !island.Contains(new Vec2(p.X, p.Y))) continue;   // its own land, not a neighbour's in the box
             float cluster = Nz(p.X / 42f, p.Y / 42f, 97 + island.Id) * 0.5f + 0.5f;
             if (rng.NextDouble() > 0.25 + 0.9 * cluster) continue;
             double pick = rng.NextDouble() * total;
@@ -677,7 +689,9 @@ public partial class MarksView : Node2D
             float dist = from.DistanceTo(x) - 18;
             for (float s = 12; s < dist; s += 15)
                 m.Dot(from + (x - from).Normalized() * s + new Vector2(0, Mathf.Sin(s * 0.05f) * 6), 2.4f, Ink.Red with { A = 0.75f });
-            text.Items.Add((ring + new Vector2(0, r + 30), Text.Get("MARK_DIG"), 19, Ink.Red, Fonts.Italic));
+            // Lettered beside the ring, on the side away from the trail: under or over it, it sat beneath the HUD's
+            // prompt or day plate whenever she was inside the ring.
+            text.Items.Add((ring + new Vector2((x.X > ring.X ? -1 : 1) * (r + 48), 0), Text.Get("MARK_DIG"), 19, Ink.Red, Fonts.Italic));
         }
         foreach (var wr in world.Map.Wrecks)
         {

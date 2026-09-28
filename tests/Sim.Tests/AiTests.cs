@@ -164,13 +164,87 @@ public class AiTests
         Assert.True(w.Ship.Pos.DistanceTo(far) < 1);
     }
 
+    [Fact]
+    public void MerchantsAnswerAnAttackerAlongsideAndKeepRunning()
+    {
+        var w = World.NewRun(4, populate: false);
+        w.Wind.SetFixed(Angles.Wrap(Angles.FromCompassDeg(0) + Math.PI), 8);
+        var origin = OpenWater(w, RegionType.Deep, 350);
+        w.Ship.Pos = origin + new Vec2(origin.X > 0 ? -1200 : 1200, 0);
+        var merchant = w.Spawn("schooner", origin, 0, Faction.FreeTraders, new MerchantCaptain(), crew: 16, cannons: World.MerchantGuns);
+        merchant.Ai = new AiState { Role = Role.Merchant, HomePort = w.Map.StartPort.Id };
+        merchant.SailTarget = 3;
+        merchant.SailFraction = 1;
+        var raider = w.Spawn("sloop", origin + new Vec2(0, 140), 0, Faction.Brethren, new RaiderCaptain(), crew: 8, cannons: 4);
+        raider.Ai = new AiState { Role = Role.Raider, HomePort = w.Map.Ports.First(p => p.Faction == Faction.Brethren).Id };
+        raider.SailTarget = 3;
+        raider.SailFraction = 1;
+        double raiderHp = raider.HullHp;
+        bool fired = false;
+        for (int i = 0; i < 30 * 20 && !fired; i++)
+        {
+            w.Tick(new ShipInput(0, 0));
+            fired |= w.Events.Any(e => e.Type == CombatEventType.Fire && e.ShipId == merchant.Id);
+        }
+        Assert.True(fired, "a merchant answers a raider that comes alongside");
+        Assert.True(merchant.Ai.Fleeing, "and keeps running");
+        for (int i = 0; i < 30 * 3; i++) w.Tick(new ShipInput(0, 0));
+        Assert.True(raider.HullHp < raiderHp, "her broadside lands");
+        Assert.False(w.Hostile(merchant, raider), "she still never goes looking for a fight");
+    }
+
+    [Fact]
+    public void AFleeingMerchantYawsOnlyALittleToBringHerGunsToBear()
+    {
+        var w = World.NewRun(4, populate: false);
+        w.Wind.SetFixed(Angles.Wrap(Angles.FromCompassDeg(0) + Math.PI), 8);   // from the north: east is a beam reach
+        var origin = OpenWater(w, RegionType.Deep, 350);
+        w.Ship.Pos = origin + new Vec2(origin.X > 0 ? -1200 : 1200, 0);
+        var merchant = w.Spawn("schooner", origin, 0, Faction.FreeTraders, new MerchantCaptain(), crew: 16, cannons: World.MerchantGuns);
+        merchant.Ai = new AiState { Role = Role.Merchant, HomePort = w.Map.StartPort.Id };
+        var raider = w.Spawn("sloop", origin + new Vec2(-150, 0), 0, Faction.Brethren, null, crew: 8, cannons: 4);
+        raider.Ai = new AiState { Role = Role.Raider, HomePort = w.Map.Ports.First(p => p.Faction == Faction.Brethren).Id };
+        w.Tick(new ShipInput(0, 0));
+        void Place(Vec2 rel)
+        {
+            merchant.Pos = origin;
+            merchant.Heading = 0;
+            merchant.AngVel = 0;
+            raider.Pos = origin + rel;
+        }
+        // Dead astern: bringing a side to bear would cost a 90° turn, so she just runs and holds her fire.
+        Place(new Vec2(-150, 0));
+        Assert.True(Angles.Rad(Seamanship.YawLimitDeg) < Math.PI / 2);
+        var astern = Seamanship.FightingRetreat(w, merchant, raider);
+        var run = Seamanship.Flee(w, merchant, raider.Pos);
+        Assert.Equal(run.Rudder, astern.Rudder, 6);
+        Assert.False(astern.FirePort || astern.FireStarboard);
+        // Just abaft the starboard beam: a small yaw to starboard puts it abeam, so she makes it (and holds fire till it bears).
+        Place(new Vec2(-51, 141));
+        var quarter = Seamanship.FightingRetreat(w, merchant, raider);
+        run = Seamanship.Flee(w, merchant, raider.Pos);
+        Assert.True(quarter.Rudder > run.Rudder + 0.1, $"yaw {quarter.Rudder:0.00} vs run {run.Rudder:0.00}");
+        Assert.False(quarter.FirePort || quarter.FireStarboard);
+        // Abeam to starboard: the side bears and fires; once it is empty she no longer yaws for it.
+        Place(new Vec2(0, 150));
+        var abeam = Seamanship.FightingRetreat(w, merchant, raider);
+        Assert.True(abeam.FireStarboard);
+        Assert.False(abeam.FirePort);
+        merchant.Loaded[(int)Side.Starboard] = false;
+        Place(new Vec2(-51, 141));
+        quarter = Seamanship.FightingRetreat(w, merchant, raider);
+        run = Seamanship.Flee(w, merchant, raider.Pos);
+        Assert.Equal(run.Rudder, quarter.Rudder, 6);
+    }
+
     /// <summary>A sea point in the region with no land on the nav grid within <paramref name="clear"/> metres.</summary>
     static Vec2 OpenWater(World w, RegionType region, double clear)
     {
-        for (double y = -1800; y <= 1800; y += 100)
-            for (double x = -2600; x <= 2600; x += 100)
+        var seed = w.Map.RegionOf(region).Seed;
+        for (double y = -3000; y <= 3000; y += 100)
+            for (double x = -3000; x <= 3000; x += 100)
             {
-                var c = new Vec2(x, y);
+                var c = seed + new Vec2(x, y);
                 if (w.Map.RegionAt(c).Type != region) continue;
                 bool open = true;
                 for (int a = 0; a < 16 && open; a++)
@@ -211,9 +285,9 @@ public class AiTests
     [Fact]
     public void ThePopulatedSeaTradesAndKeepsItsBudget()
     {
-        // Seed 3: a typical trading sea under map generator v5 (seed 7's map changed with v5 and is a slow one).
+        // Seed 3: a typical trading sea (the 145-port chart of map generator v6).
         var w = World.NewRun(3);
-        Assert.InRange(w.Others.Count, 20, 70);
+        Assert.InRange(w.Others.Count, 80, 260);   // about a ship a port on the 145-port chart
         Assert.Contains(w.Others, s => s.Ai!.Role == Role.Merchant);
         Assert.Contains(w.Others, s => s.Ai!.Role == Role.Patrol);
         Assert.Contains(w.Others, s => s.Ai!.Role == Role.Raider);
@@ -256,5 +330,18 @@ public class AiTests
         }
         Assert.All(loaded.Others.Where(o => o.Ai!.DestPort >= 0), o => Assert.NotEmpty(o.Ai!.Path));
         Assert.Equal(w.Hash(), loaded.Hash());
+    }
+
+    [Fact]
+    public void EveryShipKeepsHerNameThroughASave()
+    {
+        var w = World.NewRun(9);
+        Assert.Equal(w.Player.ShipName, w.NameOf(w.Ship));
+        var names = w.Others.Select(o => w.NameOf(o)).ToList();
+        Assert.All(names, n => Assert.False(string.IsNullOrWhiteSpace(n)));
+        Assert.True(names.Distinct().Count() > names.Count / 2, "names vary from ship to ship");
+        var copy = World.LoadJson(w.SaveJson());
+        foreach (var o in w.Others) Assert.Equal(w.NameOf(o), copy.NameOf(copy.Others.Single(c => c.Id == o.Id)));
+        Assert.Equal(w.Hash(), copy.Hash());   // naming draws nothing from the run's random stream
     }
 }

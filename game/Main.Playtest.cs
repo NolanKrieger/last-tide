@@ -139,8 +139,9 @@ public partial class Main
             ptPortFrames++;
             if (ptPortFrames == 3) portScreen.Show(1);
             else if (ptPortFrames == 6) portScreen.Show(2);
-            else if (ptPortFrames == 9) portScreen.Show(0);
-            else if (ptPortFrames >= 12)
+            else if (ptPortFrames == 9) portScreen.Show(3);
+            else if (ptPortFrames == 12) portScreen.Show(0);
+            else if (ptPortFrames >= 15)
             {
                 ptPortFrames = 0;
                 string port = world.Docked!.Name, cargoIn = Cargo();
@@ -212,7 +213,14 @@ public partial class Main
             int pick = (int)(ptNextUi * 100) % 3;
             ptUi = pick == 0 ? "chart" : pick == 1 ? "crew" : "pause";
             ptUiFrames = 6;
-            if (ptUi == "chart") { PtTap("Chart"); if (!chartScreen.IsOpen) PtFail("the chart key did not open the chart"); }
+            if (ptUi == "chart")
+            {
+                bool keeper = world.HasCartographer;
+                PtTap("Chart");
+                if (keeper && !chartScreen.IsOpen) PtFail("the chart key did not open the chart");
+                if (!keeper && chartScreen.IsOpen) PtFail("the chart opened with no cartographer aboard");
+                if (!keeper) ptUi = "";   // nothing to close: the HUD said why instead
+            }
             else if (ptUi == "crew") { PtTap("Crew"); if (!crewPanel.IsOpen) PtFail("the crew key did not open the crew panel"); }
             else { PtTapKey(Godot.Key.Escape); if (!paused) PtFail("Esc did not pause"); }
             return;

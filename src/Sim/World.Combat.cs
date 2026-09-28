@@ -242,9 +242,8 @@ public sealed partial class World
         var mid = (a + b) * 0.5;
         double half = a.DistanceTo(b) * 0.5, best = double.MaxValue;
         Vec2? hit = null;
-        foreach (var island in Islands)
+        foreach (var island in Map.IslandsNear(mid, half))
         {
-            if (island.Centre.DistanceTo(mid) > island.BoundRadius + half) continue;
             if (island.Contains(a)) return a;
             var pts = island.Points;
             for (int i = 0, j = pts.Length - 1; i < pts.Length; j = i++)
@@ -296,7 +295,9 @@ public sealed partial class World
         if (ship.IsPlayer)
         {
             RunOver = true;
-            CauseOfSinking = MonsterHitTime >= 0 && Time - MonsterHitTime < 60 ? "SUNK_" + (LastMonsterHit == MonsterType.None ? "ERUPTION" : LastMonsterHit.ToString().ToUpperInvariant())
+            CauseOfSinking = WhirlpoolHitTime >= 0 && Time - WhirlpoolHitTime < 30 && WhirlpoolHitTime >= MonsterHitTime ? "SUNK_WHIRLPOOL"
+                : IceHitTime >= 0 && Time - IceHitTime < 60 && IceHitTime >= MonsterHitTime ? "SUNK_ICE"
+                : MonsterHitTime >= 0 && Time - MonsterHitTime < 60 ? "SUNK_" + (LastMonsterHit == MonsterType.None ? "ERUPTION" : LastMonsterHit.ToString().ToUpperInvariant())
                 : ship.WaterOnlyStand ? "SUNK_WATER"
                 : rammedAt >= 0 && rammedAt >= shotAt && Time - rammedAt < 60 ? "SUNK_RAM"
                 : ship.LastHitBy == null && !(shotAt >= 0 && Time - shotAt < 60) ? "SUNK_SEA" : "SUNK_GUNS";
@@ -305,6 +306,7 @@ public sealed partial class World
         if (ship.LastHitBy?.IsPlayer == true)
         {
             Stats.ShipsSunk++;
+            if (ship.Faction == Faction.Brethren) EarnBounty(ship);   // the Crown pays for pirates, raider or hunter
             if (ship.Ai?.Role is Role.Hunter or Role.Privateer)
                 Player.Reputation[(int)Faction.Crown] = Math.Min(100, Player.Reputation[(int)Faction.Crown] + 3);   // a bounty hunter fewer
             else

@@ -27,7 +27,9 @@ public partial class Hints : CanvasLayer
         new("leak", h => h.world.Ship.Leaks > 0 || h.world.Ship.Water > 3, h => false, "water"),
         new("night", h => h.world.IsNight, h => false, "wind"),
         new("threat", h => h.world.ThreatTier >= 1, h => false, "threat"),
-        new("chart", h => h.atSea > 45 && !h.ChartOpened, h => h.ChartOpened),
+        // No cartographer aboard (the voyage starts without one): say why nothing is kept, and where to find one.
+        new("cartographer", h => h.atSea > 20 && !h.world.HasCartographer, h => h.world.HasCartographer, "prompt"),
+        new("chart", h => h.atSea > 45 && !h.ChartOpened && h.world.HasCartographer, h => h.ChartOpened),
         new("spyglass", h => h.atSea > 90, h => false),
         new("storm", h => h.world.ConditionsAt(h.world.Ship.Pos).Storm > 0.05, h => false, "wind"),
     };

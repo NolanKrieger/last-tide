@@ -25,12 +25,15 @@ public partial class Main : Node2D
     ChartView chart = null!;
     MarksView marks = null!;
     LifeView life = null!;
+    WhirlpoolView whirlpools = null!;
+    IceView ice = null!;
     FogView fog = null!;
     WakeView wake = null!;
     ShipView shipView = null!;
     Hud hud = null!;
     ChartScreen chartScreen = null!;
     PortScreen portScreen = null!;
+    ShipCard shipCard = null!;
     CrewPanel crewPanel = null!;
     FleetView fleet = null!;
     EffectsView effects = null!;
@@ -66,9 +69,11 @@ public partial class Main : Node2D
     string? screenshotPath;
     int screenshotFrames = 120, frame;
     bool selfTest, reportFps, openChart, revealAll, sparring, quiet, stormAtStart;
+    Vec2? atArg;   // --at=x,y: start the voyage at this point (metres), for screenshots of far waters
+    int cartographerArg = -1;   // --cartographer[=tier]: a debug run starts with one aboard (--chart implies a green one)
     double skipSeconds;
     string? regionKey, monsterKey;
-    bool treasureAtStart, dockCove, showLogbook, pauseAtStart, debugHints, muteArg, soundArg;
+    bool treasureAtStart, dockCove, deliverAtStart, hoverArg, showLogbook, pauseAtStart, debugHints, muteArg, soundArg;
     bool crewAtStart, optionsAtStart;   // --crew, --pause=options: review captures of the crew panel and Options over the pause menu
     HashSet<string> off = new();   // --off=fog,weather,sea,marks,fleet,effects,hud,wake,monsters,chart: perf bisection
     int fleetNear;                 // --fleet=N: N extra ships within 1.2 km of the player (the GDD §17 perf target)
@@ -135,13 +140,22 @@ public partial class Main : Node2D
             else if (a == "--selftest") selfTest = true;
             else if (a == "--fps") reportFps = true;
             else if (a == "--chart") openChart = true;
+            else if (a == "--cartographer" || a.StartsWith("--cartographer=")) cartographerArg = a.Contains('=') ? Math.Clamp(ArgInt(a, 0), 0, 2) : 0;
             else if (a == "--reveal") revealAll = true;
             else if (a == "--sparring") sparring = true;
             else if (a.StartsWith("--preset=")) preset = a["--preset=".Length..] switch { "calm" => Preset.CalmSeas, "tempest" => Preset.Tempest, _ => Preset.RoughSeas };
             else if (a == "--quiet") quiet = true;
             else if (a.StartsWith("--time=")) skipSeconds = ArgNum(a, skipSeconds);
             else if (a == "--storm") stormAtStart = true;
+            else if (a.StartsWith("--at="))
+            {
+                var xy = a["--at=".Length..].Split(',');
+                if (xy.Length == 2 && double.TryParse(xy[0], System.Globalization.CultureInfo.InvariantCulture, out double ax)
+                    && double.TryParse(xy[1], System.Globalization.CultureInfo.InvariantCulture, out double ay)) atArg = new Vec2(ax, ay);
+            }
             else if (a == "--treasure") treasureAtStart = true;
+            else if (a == "--deliver") deliverAtStart = true;
+            else if (a == "--hover") hoverArg = true;
             else if (a == "--dock=cove") dockCove = true;
             else if (a == "--title") titlePage = "home";
             else if (a.StartsWith("--title=")) titlePage = a["--title=".Length..];
@@ -250,6 +264,9 @@ public partial class Main : Node2D
         }
         if (revealAll)
             foreach (var r in world.Map.Regions) world.Reveal.PaintRegion(world.Map, r.Type);
+        // The chart opens only with a cartographer aboard (Nolan, 2026-09-27), so --chart brings a green one.
+        if (cartographerArg >= 0 || openChart)
+            world.Player.Officers.Add(new Officer { Type = OfficerType.Cartographer, Tier = Math.Max(0, cartographerArg) });
         if (regionKey != null)
         {
             var def = RegionDef.All.FirstOrDefault(r => r.Key == regionKey);
@@ -259,6 +276,11 @@ public partial class Main : Node2D
                 world.Ship.Pos = world.SeaPointNear(regionSeed, 0, 300);
                 world.Ship.Vel = Vec2.Zero;
             }
+        }
+        if (atArg is { } at)
+        {
+            world.Ship.Pos = at;
+            world.Ship.Vel = Vec2.Zero;
         }
         for (int i = 0; i < (int)(skipSeconds * Tuning.TicksPerSecond); i++)
             world.Tick(new ShipInput(0, 0));
@@ -314,9 +336,10 @@ public partial class Main : Node2D
             // Out of the home harbour's ring (it would take her straight in), then hull or water gives out.
             world.Ship.Pos = world.SeaPointNear(world.Map.StartPort.Harbor, 380, 520);
             world.Ship.Vel = Vec2.Zero;
-            if (lastStandArg == "water") { world.Ship.Water = 100; world.Ship.Leaks = 3; }
+            if (lastStandArg == "water") { world.Ship.Water = 100; world.Ship.Leaks = 3; world.Ship.HullHp = world.Ship.MaxHp * 0.5; }   // under the flood line, or she drains at once
             else world.Ship.HullHp = 0;
         }
+        if (deliverAtStart) Deliver();
         if (noticeArg != null) world.Notices.Enqueue(noticeArg);
         prevPose = curPose = (world.Ship.Pos, world.Ship.Heading);
         suspendEnabled = selfTest;
@@ -376,9 +399,15 @@ public partial class Main : Node2D
         life = new LifeView();
         life.Init(world, coast, chart);
         AddChild(life);
+        whirlpools = new WhirlpoolView();
+        whirlpools.Init(world);
+        AddChild(whirlpools);
+        ice = new IceView();
+        ice.Init(world);
+        AddChild(ice);
         fog = new FogView();
         fog.Init(world.Reveal, world.Seed);
-        sea.BindReveal(fog.Texture);
+        sea.BindReveal(fog.SeaTexture);   // the charted mask with her live sight stamped in
         AddChild(fog);
         wake = new WakeView { ZIndex = 8 };
         AddChild(wake);
@@ -410,6 +439,9 @@ public partial class Main : Node2D
         hud.Init(world);
         hud.KeyLabel = a => Settings.Label(settings.KeyFor(a));
         hintsView.Hud = hud;
+        shipCard = new ShipCard();
+        AddChild(shipCard);
+        shipCard.Init(world, Fell);
         chartScreen = new ChartScreen();
         AddChild(chartScreen);
         chartScreen.Init(world, Fell, fog.Texture);
@@ -457,7 +489,7 @@ public partial class Main : Node2D
     void FreeViews()
     {
         if (!viewsBuilt) return;
-        foreach (Node n in new Node[] { sea, chart, marks, life, fog, wake, fleet, shipView, effects, weather, monsters, camera, hud, chartScreen, portScreen, crewPanel })
+        foreach (Node n in new Node[] { sea, chart, marks, life, fog, wake, fleet, shipView, effects, weather, monsters, camera, hud, shipCard, chartScreen, portScreen, crewPanel })
         {
             RemoveChild(n);
             n.QueueFree();
@@ -635,6 +667,7 @@ public partial class Main : Node2D
     public override void _Notification(int what)
     {
         if (what == NotificationWMCloseRequest) QuitGame();   // the window's close button (auto-accept is off: Main quits)
+        else if (what == NotificationWMMouseExit) mouse = new Vector2(-1e5f, -1e5f);   // off the window, no ship is under the pointer
         // Godot sends no key-up to a window that has lost focus: a key held while alt-tabbing away stayed held.
         else if (what is (int)NotificationApplicationFocusOut or (int)NotificationWMWindowFocusOut) LetGoAll();
     }
@@ -713,6 +746,7 @@ public partial class Main : Node2D
         curPose = (world.Ship.Pos, world.Ship.Heading);
         wake.Record(world.Ship);
         fleet.Sync();
+        monsters.Sync();
         // World.Events holds the last tick's events until the next tick runs; once she is lost (or in port) no tick
         // runs, so they are consumed only when this call actually advanced the clock.
         if (world.Ticks != ticksBefore)
@@ -760,7 +794,9 @@ public partial class Main : Node2D
         shipView.SpyglassDir = world.SpyglassDir;
         shipView.SpyglassRange = world.SpyglassRange;
         shipView.SetPose(pos, heading);
+        fog.Sight(pos, world.VisionRadius);   // she sees round her now, charted or not
         fleet.Render(alpha);
+        monsters.Alpha = alpha;
 
         // The camera leads the ship along her heading, more with speed, and eases after her.
         var ship = world.Ship;
@@ -786,6 +822,11 @@ public partial class Main : Node2D
 
         var shipScreen = GetCanvasTransform() * Ink.V(pos);
         weather.Update(shipScreen, camera.Zoom.X, delta, Paused);
+        // The ship under the pointer, at sea with nothing over it (`--hover` points at the nearest ship on the screen).
+        if (hoverArg && world.Others.Where(o => world.PlayerSees(o.Pos) && GetViewport().GetVisibleRect().HasPoint(GetCanvasTransform() * Ink.V(o.Pos)))
+                .OrderBy(o => o.Pos.DistanceTo(ship.Pos)).FirstOrDefault() is { } near)
+            mouse = GetCanvasTransform() * Ink.V(near.Pos);
+        shipCard.Refresh(mouse, GetCanvasTransform(), mode == Mode.Run && !ScreenUp && !Paused && !world.RunOver && hud.Visible, hud.Plates);
         // A notice raised while a full screen covers the HUD (the port on docking: "Unpaid hands deserted", "By a
         // hair!") waits for the sea instead of timing out unseen underneath it.
         List<string>? held = null;
@@ -800,6 +841,7 @@ public partial class Main : Node2D
         if (held != null) foreach (var n in held) world.Notices.Enqueue(n);
         hintsView.DockPrompt = hud.DockPromptVisible;
         hintsView.Update(delta, Paused);
+        hud.HintCard = hintsView.NoteShown ? hintsView.NoteRect : null;
         audio.Update(delta, Paused, paused || options.IsOpen || mode == Mode.Title || logbook.IsOpen);
         if (mode == Mode.Run && world.RunOver && !logbook.IsOpen)
         {
@@ -829,6 +871,25 @@ public partial class Main : Node2D
     public void Snap(string path) => GetViewport().GetTexture().GetImage().SavePng(path);
 
     /// <summary>F inside a harbour ring: dock if the port is open, else the HUD says why.</summary>
+    /// <summary>
+    /// `--deliver`: a pirate on the Crown's books, every contract on the home board signed, and the ship alongside the
+    /// first one's port — docked there with `--dock`, so the office shows a real arrival.
+    /// </summary>
+    void Deliver()
+    {
+        world.Player.BountyOwed = world.Bounty(world.Spawn("brig", world.Ship.Pos, 0, Faction.Brethren, null));
+        world.Player.BountyShips = 1;
+        world.Others.RemoveAt(world.Others.Count - 1);
+        if (world.Apply(new PortCommand(PortAction.Dock)) != PortResult.Ok) return;
+        var board = world.ContractOffers(world.Docked!);
+        for (int i = 0; i < board.Length; i++) world.Apply(new PortCommand(PortAction.SignContract, Amount: i));
+        world.Apply(new PortCommand(PortAction.CastOff));
+        if (world.Player.Contracts.Count == 0) return;
+        var to = world.Map.Ports[world.Player.Contracts[0].To];
+        world.Ship.Pos = to.Harbor;
+        world.Ship.Vel = Vec2.Zero;
+    }
+
     public bool TryDock()
     {
         if (world.Apply(new PortCommand(PortAction.Dock)) != PortResult.Ok) return false;
@@ -865,6 +926,16 @@ public partial class Main : Node2D
     {
         if (e is InputEventMouse m) mouse = m.Position;
         if (ScreenUp) LetGo(e);   // before the GUI, so a focused control cannot swallow the release
+        // F11 or Alt+Enter flips fullscreen anywhere (fixed keys, like Esc), saved like the options checkbox.
+        if (e is InputEventKey { Pressed: true, Echo: false } fk && (fk.Keycode == Key.F11 || (fk.Keycode == Key.Enter && fk.AltPressed)))
+        {
+            settings.Fullscreen = !settings.Fullscreen;
+            settings.Save();
+            ApplySettings();
+            if (options.IsOpen) options.Refresh();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         // Esc in the chart's pin note abandons the pin (the note field kept the focus: Esc and M did nothing).
         if (viewsBuilt && chartScreen.IsOpen && chartScreen.NoteHasFocus && e is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
         {
@@ -946,8 +1017,24 @@ public partial class Main : Node2D
                 break;
             case "Lantern": if (key.Pressed && !paused) lanternQueued = true; break;
             case "Crew": if (key.Pressed && !paused) crewPanel.Toggle(); break;
-            case "Chart": if (key.Pressed && !paused) { chartScreen.Toggle(); hintsView.ChartOpened = true; } break;
+            case "Chart": if (key.Pressed && !paused) OpenChart(); break;
             case "Dock": if (key.Pressed && !paused && !TryDock()) actionQueued = true; break;
         }
+    }
+
+    /// <summary>
+    /// The chart key at sea: the chart opens only with a cartographer aboard (Nolan, 2026-09-27); without one the HUD
+    /// says why, once (a second press while it is up or queued adds nothing).
+    /// </summary>
+    void OpenChart()
+    {
+        if (world.HasCartographer)
+        {
+            chartScreen.Toggle();
+            hintsView.ChartOpened = true;
+            return;
+        }
+        const string why = "NOTICE_NO_CARTOGRAPHER";
+        if (!world.Notices.Contains(why) && hud.NoticeShown != Text.Get(why)) world.Notices.Enqueue(why);
     }
 }

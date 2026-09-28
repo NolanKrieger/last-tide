@@ -8,7 +8,6 @@ public sealed record BlackMarketDef(string Key, int Price)
         new("ghost_sails", 650),     // hunters detect you 30% closer
         new("smugglers_keel", 550),  // points 5% closer to the wind
         new("long_nines", 700),      // +40 m gun range
-        new("bilge_engine", 500),    // pumps ×1.5
         new("hidden_hold", 600),     // +15% cargo
         new("false_colours", 450),   // reputations mend twice as fast
     };

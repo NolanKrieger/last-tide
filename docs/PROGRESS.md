@@ -9,7 +9,7 @@ Roadmap and exit criteria: `docs/GDD.md` §18. Decisions: GDD §19 (the "M1 buil
 |---|---|---|
 | M0 | Project skeleton | **Done** 2026-09-23 |
 | M1 | Sailing feel | **Built** 2026-09-23. Gate lifted by Nolan the same day: finish the whole game, then iterate on feel. |
-| M2 | World gen, regions, ports, chart reveal | **Done** 2026-09-23 |
+| M2 | World gen, regions, ports, chart reveal | **Done** 2026-09-23. 2026-09-27: v6 world — landform islands, 18 × 13.5 km chart, 12 regions, no edge (see "World v6" below). |
 | M3 | Ports and economy | **Done** 2026-09-23 |
 | M4 | Combat | **Done** 2026-09-23 |
 | M5 | AI ships, reputation, director, Threat | **Done** 2026-09-23 |
@@ -18,7 +18,7 @@ Roadmap and exit criteria: `docs/GDD.md` §18. Decisions: GDD §19 (the "M1 buil
 | M8 | Progression: hulls, parts, crew, officers | **Done** 2026-09-23 |
 | M9 | Exploration: coves, black market, bottle maps, digs, wrecks, achievements | **Done** 2026-09-23 |
 | M10 | Run wrapper: title, presets, cosmetics, name, logbook, bests, suspend save, hints | **Done** 2026-09-23 |
-| M11 | Art, audio, Steam, balance, options, perf, exports | **Done** 2026-09-26: art pass, full audit (178 fixes) and visual overhaul — see "Audit and visual overhaul" below. Open: the next balance round and Nolan's playtests. |
+| M11 | Art, audio, Steam, balance, options, perf, exports | **Done** 2026-09-26: art pass, full audit (178 fixes) and visual overhaul — see "Audit and visual overhaul" below. 2026-09-27: harbour office (contracts, survey fees, Crown bounties, smuggling). Water follows the hull; pumps removed. Open: the next balance round and Nolan's playtests. |
 
 ## M0 — Skeleton (done 2026-09-23)
 
@@ -166,7 +166,280 @@ Evidence (merged tree, 2026-09-26):
   lane field a tick) — `--fps` now prints them.
 - Galleries: 28 standard screens before/after + zoomed ships/monsters, reviewed at full size.
 
+## Harbour office (2026-09-27)
+
+Nolan asked for more ways to make money. The lean start rarely grew, and he picked four from a brainstorm (passengers and
+taking prizes were declined). All four live in a fourth port tab, the **Harbour office**. Rules and numbers: GDD §6
+"Harbour office" and §19.
+
+- **Sim:** `src/Sim/Contracts.cs` holds the kinds table (freight, dispatches, contraband), `Contract` and `Receipt`.
+  `src/Sim/World.Office.cs` covers:
+  - the per-day board, drawn per slot from (seed, port, day, slot)
+  - signing and giving up (logged `PortAction.SignContract` / `AbandonContract`) and deadlines
+  - delivery on docking, the survey fee on a first visit, and Crown bounties (earned when a Brethren ship sinks, paid
+    at Crown ports)
+  - customs searches on docking and Crown patrol searches at sea
+  
+  Contract crates count in `Player.SlotsUsed`. Contracts, signed slots, bounties owed and patrols that searched are
+  saved, hashed and replay. `Autopilot` signs freight and dispatches bound where it is going, and when exploring takes
+  a paid passage to an unvisited market no farther than its own pick. It doesn't smuggle.
+- **Game:**
+  - `PortScreen`: the office page (board, contracts in hand with Give up, bounties, the arrival account) and a
+    "+N gold on arrival" line under the purse. Q/E page through four tabs.
+  - `ChartScreen`: red double rings and "due Day N" on contract ports, a key entry, and hover lines.
+  - `Hud`: notices can carry values (`"KEY|arg"`).
+  - `--deliver` debug arg.
+  - Strings in `en.csv`.
+
+Evidence (2026-09-27):
+- `dotnet build`: 0 errors, 0 warnings. `dotnet test tests/Sim.Tests`: **242/242**, including 18 new `OfficeTests`.
+- `--selftest`: **PASS, 204 ok**. New checks: office strings, office tab by click, Sign and Give up by click, E wraps.
+  `--playtest=3,1 --seed=21`: PASS, 0 errors.
+- Screenshots reviewed: the office board, an arrival at 100% and 150% UI scale (`--seed=21 --deliver --dock
+  --page=3`), and the chart's delivery rings.
+- Balance, Rough · 200 voyages · same seeds (`docs/BALANCE.md`):
+  - voyages that grew past 200 gold: 36 → **91**
+  - voyages that bought a bigger hull: 15 → **30**
+  - median day survived: 16.0 → 16.3
+
+## Ship card (2026-09-27)
+
+Nolan: "i should be able to hover over ships and see information about them." Details are in GDD §15 and §19.
+
+- `game/ShipCard.cs` picks the ship under the pointer and draws the red ring and card, on canvas layer 11.
+- The pick tests the hull's capsule on screen with 8 px of slack, so small ships at low zoom are still easy to hit.
+- The card is lettered again only when what it shows changes.
+- `World.NameOf` names every AI ship from the seed and its id.
+- `Main` feeds the card the pointer each frame, and clears the pointer when the mouse leaves the window.
+- `--hover` points at the nearest ship on the screen (for screenshots).
+
+Evidence: `dotnet test` **243/243**. `--selftest` **PASS, 207 ok, twice in a row**. The three new checks, through real mouse
+motion: a ship's card shows name, stance and bounty; your own ship's card; no card on open water. One earlier run
+failed "holding A turns her to port" once; that check runs before any hover code, and it passed on both reruns.
+Screenshots reviewed: `--sparring --hover --zoom=0.6` and `--fleet=10 --hover --zoom=0.5`.
+
+## Merchants fight back; fullscreen keys (2026-09-27)
+
+Nolan: "merchant ships should be able to defend themselves but also still be trying to get away", and he could not make
+the window fullscreen. Details are in GDD §8 and §19.
+
+- `Seamanship.FightingRetreat` (`src/Sim/Ai.cs`): the flee course (`FleeHeading`, split out of `Flee`), bent up to
+  `YawLimitDeg` 50° to bring a loaded side abeam of an attacker in gun range; fires when `ClearShot` bears.
+  `MerchantCaptain` uses it whenever a threat is in sight. Merchants carry `World.MerchantGuns` = 4 (was 2).
+- `project.godot`: `window/size/resizable=true` (it was false, so KWin would not maximise or fullscreen it).
+  `Main._Input`: F11 or Alt+Enter toggles `Settings.Fullscreen`, saves, applies, and refreshes Options if open.
+
+Evidence: `dotnet test` **245/245** (two new: a merchant answers a raider alongside, hits it, keeps fleeing, and still
+never attacks on sight; she holds course and fire for a pursuer dead astern, yaws for one just abaft the beam, fires the
+side that bears, and stops yawing for a side that is empty). `--selftest` **PASS** with two new checks at the end: F11
+goes fullscreen and saves it; Alt+Enter goes back to a window. Not run: the balance batch (`scratch/balance` is no
+longer on disk; the autopilot never attacks merchants, so its numbers are only touched through raiders taking fire).
+No screenshot of a merchant firing.
+
+## UI/UX pass (2026-09-27)
+
+Nolan: "audit the game and make ui and ux improvements". A 30-screen gallery (every page, 100 % and 150 % UI scale)
+was reviewed at full size; what it found and what changed:
+
+- **Chart** (`game/ChartScreen.cs`):
+  - It opened on the whole sheet with the charted sea (11 % at the start) crammed into one corner. Now it opens framed
+    on what she has charted, her position and her deliveries (zoom 1–3.5), and Space centres it on the ship.
+  - Port names overlapped islands, glyphs and region names, and ran into the neatline. Names now try 8 places and take
+    the one that covers least: lettering, glyphs, the ship and pins first, then land, then region names. The "due Day N"
+    labels are placed the same way.
+  - Region names are measured at the size they are drawn, and keep clear of port names and of each other.
+  - Sea monsters no longer sit cut off at the neatline. The scale bar says ⅛, not 0.125.
+  - At 150 % the subtitle ran under the cartouche. The cause was a stale minimum size in `UiCartouche`, which now
+    re-measures itself when resized; this also affected the port and title plates.
+  - The one-line help squeezed into the bottom-right corner is now a "Using the chart" list opposite the key, built
+    from the bindings.
+- **HUD:**
+  - The Threat tier ("Flat Calm") sat uncaptioned beside the clock and read as a weather report in a 20-knot breeze.
+    It now has a "Threat" caption.
+  - Edge markers step out from under a hint note.
+  - The treasure ring's "dig here" was lettered under the ring, beneath the HUD prompt; it now sits beside the ring.
+- **Port:**
+  - The market has a **max** button (as much as purse, hold and stock allow, or everything held).
+  - Buying a new hull, giving up a contract and dismissing an officer ask **Confirm?** once (red, 4 s) before acting.
+  - At 125–150 % the header and footer step in from the corner scrollwork.
+  - Hull descriptions and the good's group line wrap instead of ending in "…".
+- **Ship card:** your own card lists your deliveries and their days, soonest first; red under a day left (GDD §15).
+- **Text:**
+  - "said to lie in the The Shoals" → a prose form of each region (`REGION_IN_*`).
+  - Copper: "12% likelier to open no leak" → "12% fewer leaks from hits".
+  - "1 officer berths" → "officers 1".
+  - Officer hire buttons say "gold".
+- **Title:** the voyage page's preview wake ran off the patch of sea onto bare paper; it now fades out inside it.
+
+Evidence (2026-09-27):
+- `dotnet build`: 0 errors, 0 warnings.
+- `--selftest`: **PASS, 214 ok**. New checks: the chart opens framed with the ship on it (zoom 1.97); Space re-centres;
+  − returns to the opening zoom; **max**; Give up asks once, then acts on a second click; the own card lists the
+  delivery.
+- `dotnet test`: **246/246**, run with the concurrent pumps rework in the tree too.
+- Before/after screenshots reviewed: chart (start, delivery, full reveal, 150 %), sea, hints, treasure, market,
+  shipwright, tavern, office (100 % and 150 %), voyage page.
+
+## Water follows the hull; pumps removed (2026-09-27)
+
+Nolan disliked the pumps and asked for the water to rise below 60% hull and fall above it, in proportion to the
+distance from 60%. Details are in GDD §8 and §19.
+
+- `Ship.DamageTick`: water changes by `FloodPerSecond` = `FloodRate` 10 × (`FloodLine` 0.6 − hull fraction) %/s, so
+  1%/s per 10% of hull from the line. Leaks no longer add water; they still stop the patching until plugged.
+- Pumps gone: the fourth station is **spare hands** (same wage, no effect); the Pumps part (`Part` has 8 entries now;
+  a 9-entry save drops index 6) and the bilge engine unique (dropped from a save on load) are removed; order 3 is
+  "Repair" (carpenters first); the pumps sound loop is no longer played.
+- Last stand: a flat `StandGlass` 35 s (was 20 s + 3 s a pumping hand, up to 35). Carpenters keep patching through a
+  water-only stand, so she can patch over the line and drain below 80% to end it.
+- The Weed-Kraken's grip also stops her draining (else a sound hull cancelled its +3%/s).
+- HUD: the hull tube marks the flood line at 60%; the water-stand hint says "carpenters first: patch her over the flood
+  line"; the crew panel and ship card show "spare". `--laststand=water` now starts at 50% hull.
+
+Evidence: `dotnet test` **246/246** (rewritten: the water follows the hull both ways and leaks add none; carpenters plug,
+patch over the line and she drains; a water-only stand is patched out of; new: an older save drops its pumps grade and
+bilge engine). `--selftest` **PASS**. Screenshots reviewed: HUD at 45% hull, a water last stand, crew panel. Not run:
+a balance batch; expect big hulls to flood more than before (they used to have dozens of pumping hands) and a sloop
+under 60% to flood more slowly than it did with several open leaks.
+
+## World v6: landform islands, a 3× chart, twelve regions, no edge (2026-09-27)
+
+Nolan asked for islands with real-world structure (sizes, shapes, clustered placement, lagoons, bays), then for no map
+edge (monsters and whirlpools thicken further out), then for a much bigger map (he chose 3× each way, the nine regions
+bigger plus new ones). Design and numbers: GDD §5 and §19 ("Landform islands", "Bigger chart", "Beyond the chart",
+"Whirlpools and drift ice"). The cartographer (same day) is its own section in §19.
+
+- **Generator v6** (`MapGen`, `Landforms`, `Coastlines`, `RegionLayout`): 12 regions on a 4 × 3 grid over 18 × 13.5 km;
+  eleven landforms (great/high islands with coves or rias, groups, hotspot chains, atolls, almost-atolls, calderas,
+  barrier islands, drowned ridges, mangrove deltas, cays, stacks) traced from a noise-roughened shape field with
+  closing/opening and lake filling, so islands are simple polygons and lagoons open to the sea. Each region builds its
+  signature landform, then fills round 3–5 island groups to its land share. Ports prefer sheltered harbours; big
+  islands hold several; harbours, digs and wrecks lie in open sea. Coastlines are kept when only the ports re-roll.
+  Older map versions are gone: a suspend save from before v6 is refused and set aside.
+- **New regions:** Ice Reach (drift ice: `Ice`, `World.Ice`, `IceView`), Maelstrom Straits (whirlpools in the narrows
+  and a great maelstrom: `MapGen.PlaceWhirlpools`, nav cores closed), Corsair Keys (Brethren-heavy, raiders ×1.8).
+- **Beyond the chart:** no wall (`World.KeepOnTheChart` keeps only the Mangrove rule, on-chart only); outer
+  whirlpools (`Whirlpools`) and faster, surer beasts (`World.OuterMonsterRoll`, `EdgePressure`); `WhirlpoolView`; the sea
+  shader drops the neatline and darkens the water out there; the sea letters HERE BE MONSTERS.
+- **Scale work:** island spatial index (`Map.IslandsAround`, used by hull collision and line of sight); merchant lanes
+  from windowed sea-distance fields (`NavGrid.LocalDistances`, 3.6 km) instead of one full-chart field per harbour;
+  `NavGrid.IsOpenSea`; the sim builds optimized in every configuration; SDF texel 8 m; chart chunks 18 × 15 with bounds
+  grown to their islands; stamps count real island area; `--at=x,y` launch flag for screenshots of far waters.
+- **Tests:** new `EdgeTests` (sails past the edge; whirlpools crowd in with distance and are pure functions of the
+  seed; a whirlpool draws an idle hull into its eye, turns her and holes her; beasts rise within seconds 1.8 km out;
+  the Maelstrom's whirlpools sit in the region, clear of harbours, cores closed to the nav grid), `IceTests` (ice only in
+  the Ice Reach and off every shore; it drifts and replays exactly; a fast blow holes her, a crawl doesn't), new map
+  tests (coastlines simple and wound alike; every region shows its signature; sizes span orders of magnitude; ports
+  favour shelter), `AThousandSeedsValidate` now runs the thousand maps in parallel. Tests that leaned on the old
+  map's geometry (fixed search windows, "the nearest port", starts inside the old chart) now search the new one.
+  Old-map resume is replaced by a test that an older chart is refused.
+- **Self-test:** two new checks through the real keys: W carries her past the chart's east edge, and the HUD then
+  reads "Uncharted waters". "She strikes the island" now approaches a solid island's real shore.
+
+Evidence (2026-09-27): `dotnet test` **267/267** (the 1000-seed sweep included); map generation ~1 s a map; sim tick 1.6 ms with 135
+AI ships on the 151-port chart (headless, loaded machine). `--selftest`: all map/edge/cartographer checks ok; the one
+failure in my run ("her own ship shows her card") was a camera race from the new edge check's teleport, fixed by the
+hull session. Screenshots reviewed: whole-map renders of several seeds, the chart screen (whole sheet, and her marked
+at its edge when off it), the great maelstrom, the drift ice, the open sea beyond the chart (HERE BE MONSTERS, fog
+round her sight, whirlpools), the title. Not done: a balance batch on the 3× chart (runs will be longer in days;
+GDD §11 targets need re-checking), and the chart screen's port names crowd at whole-sheet zoom.
+
+## The cartographer (2026-09-27)
+
+Nolan: "You should have to hire a cartographer to use the map, and you should only be able to see what you have
+'discovered' while you have a cartographer aboard." Rules and numbers: GDD §19 "Cartographer".
+
+- **Sim:** `OfficerType.Cartographer` with `Officers.CartographerReach` (1 / 1.25 / 1.5 × vision), `CartographerPrice`
+  (40 / 120 / 320), `CartographerWage` (3 / 6 / 12), and per-type tables `PriceOf`/`WageOf`/`UsesSlot`
+  (`src/Sim/Parts.cs`). `Player.SlottedOfficers` counts slot officers only; `HireOfficer` and the hull-change trim
+  skip him. `World.HasCartographer`, `ChartRadius`, `ChartAround` (`World.Progression.cs`): the tick's vision paint,
+  the spyglass fan, a matched bottle map's X and port discovery by sight all need him; tying up marks a port only
+  with him (`World.Port.cs`); signing him on inks the harbour at once. The home tavern's cartographer is always
+  green. Saves write `CartographerRule`; an older suspend save resumes with a green one. `Autopilot` signs one on
+  at the first port where it can pay and keep 30 gold.
+- **Game:** tavern card (listed first, own portrait `assets/art/people/cartographer.png`, slot-free Hire),
+  `PortScreen.OfficerHireButton`; crew panel lists the officers and warns while none keeps the chart; M without
+  him queues `NOTICE_NO_CARTOGRAPHER` once (`Main.OpenChart`) and the key legend reads "chart (no cartographer)";
+  a `cartographer` hint (the chart hint waits for him). `FogView.Sight` + `fog.gdshader` `sight`: an analytic live
+  circle of the current vision radius, cleared every frame, on or off the chart; `FogView.SeaTexture` (the mask with
+  that circle stamped in, clamped onto the border) feeds the sea layer so it draws inside her sight. Debug:
+  `--cartographer[=0..2]`; `--chart` brings a green one. The playtest driver expects the chart key to open only with
+  him aboard.
+
+Evidence (2026-09-27, with the other sessions' work in the same tree):
+- `tests/Sim.Tests/CartographerTests.cs`, 9 tests, all pass: nothing inked or marked without him (sailing past six
+  ports with the glass up, then tying up at a new one; ledger still kept); ink to 1 / 1.25 / 1.5 × vision and ports
+  inside marked; the chart kept while he is ashore; no officer slot (lookout + cartographer on a 1-slot sloop, and he
+  survives brigantine → sloop); wages and walking off unpaid; save/load and an older save; hire/dismiss replays from a
+  save; the autopilot hires one at its first port. Updated to give their worlds a cartographer:
+  `SailingInksTheChartAndTheChartSurvivesASave`, `ACoveFoundThroughTheSpyglassCounts`,
+  `ACoveSightedThroughTheSpyglassCounts`, `TheSpyglassIsReplayedWithTheHelm` (now seed 4, aimed at the nearest
+  uncharted water: seed 5's home lies 1.4 km inside the bigger Trade Isles), and 4 tavern offers in
+  `OfficersHireIntoSlotsAndEarnTheirKeep`.
+- Full `dotnet test`: 252 of 267 pass. The 15 failures are the v6 map's, not the cartographer's (AThousandSeedsValidate,
+  GoodsMeetTheGlobalConstraints, "no open water in Deep" ×3, "no such point in Sargasso", fleet budget/moving, the
+  543 KB suspend save (the 3× reveal mask), a storm count, the crocodile, two helm/merchant AI tests, the rescue-harbour autopilot
+  test) plus `SailingInksTheChartAndTheChartSurvivesASave`: with a cartographer it inks, but 200 s from home now stays
+  mostly inside the pre-charted Trade Isles (8.95% → 9.11%, under its old-map 4,000-cell bar).
+- `--selftest`: 221 ok, 3 FAIL (two ship-card hover checks, "a lookout reports her from beyond sight"); the same three
+  fail with the cartographer block skipped, so they come from other work in the tree. Every cartographer check passes
+  through the real input path (M without him: chart shut, notice shown once; the fog's live sight and the sea inside
+  it in uncharted water; the home tavern's Hire clicked; M then opens the chart; with the cutter's slot taken a
+  clicked Hire still signs him on; GC-25 he walks off unpaid).
+  `--playtest=2,1 --seed=21`: PASS, 0 errors, a pin dropped on the chart.
+- Screenshots reviewed: the tavern with the cartographer card (`--dock --page=2`), the notice and the live circle in
+  the uncharted Deep (`--region=deep --zoom=0.3 --notice=NOTICE_NO_CARTOGRAPHER`), the crew panel's warning, and the
+  live circle 1.5 km off the chart (`--seed=5 --at=10500,300 --zoom=0.3`, frames 60 and 120). At zoom 0.5 after
+  dawn the circle (500 m) is wider than the whole view (459 m to a corner), so no fog shows there: expected.
+- Not measured: FPS. The machine sat at load average 264 from the parallel test runs (29.7 fps without a
+  cartographer, 27.6 with a legendary one, both vsync-bound runs starved of CPU).
+
+## Hull visual pass (2026-09-27)
+
+Nolan: "make visual improvements to each new ship hull, they should look really good." View-only (`game/`), no rule
+changes; details in GDD §19 "Hull liveries".
+
+- **Liveries** (`ShipArt.Liveries`): every hull has its own paint, topsides and a stripe (sloop umber/cream, cutter
+  revenue blue/white, schooner green, xebec vermilion/gold, brigantine oak/green, fluyt sea-green/red, brig ochre/black
+  wale, barque black/white, corvette slate/ochre, frigate black/ochre, indiaman brown/buff, heavy frigate black/white,
+  galleon crimson/gilt, man-o'-war black with two ochre gun decks). At sea the Crown runs a red strake and the Brethren
+  tar their topsides with a sea-green stripe; a cosmetic hull colour repaints the player's topsides.
+- **Topsides band:** the dressed texture is padded by 6% of the art's height and carries the hull side seen outside the
+  rail (tumblehome), with the stripe, plank strakes, darkening toward the waterline and an ink edge, so the paint reads
+  at play zoom (the rail alone was ~2 px). The rail is recoloured as before; the volume (rail highlight, deck shade
+  under the bulwarks) is baked in. All built once per hull/livery from the art and the `-rim` masks.
+- **Shadows and water:** a soft blurred silhouette per hull casts her shadow to the south-east (the gulls' light);
+  every mast casts one sail shadow, spars and furled canvas cast too (`InkBatch.AppendShadow`). A blue contact wash
+  and a white lip that grows with speed sit at her sides. `ShipView.Sunlight` (set by `WeatherView`) fades all of it at
+  night, in fog and rain.
+- **Rig:** sails shaded under the spar, lit across the belly by the sun, pooled at the edge, ink swelling at the belly
+  and fining at the yardarms; square canvas nests as one stack per mast (upper yards abaft the lower, square to the
+  yards, each upper sail shading the one below; before, they fanned out like blades); spars rounded by a lit line;
+  shrouds sized to the hull with ratlines up close, stays between masts, braces to the rails; she heels to leeward with
+  the pressure in her canvas and sways with the swell. The spritsail braces with the yards; the indiaman and
+  man-o'-war (which carry jibs) no longer set one.
+- **Shipwright:** the hull catalogue shows each hull in its livery (with the player's hull colour) and its shadow,
+  drawn larger (small hulls were ~34 px).
+
+Evidence (2026-09-27, in a private copy of the tree so the map rewrite in progress couldn't stall the runs; screenshots
+under Xvfb):
+- `dotnet build`: 0 errors, 0 warnings. No `src/Sim` or test changes. `dotnet test` on the same snapshot: 250/264; the
+  14 failures are in map/save tests (old map versions, save size) touched by the world v6 rewrite then in progress.
+- Screenshots reviewed: all 14 hulls before/after on a beam reach, 8-point sweeps (frigate, brigantine), faction mix,
+  night, the frigate under way, the shipwright catalogue, the title preview.
+- Draw calls with 40 fleet ships + the 14-hull sheet on screen: 87 → ~123 (one shadow draw per visible ship). Frame
+  time was flat within noise under llvmpipe (7.8/7.6 → 7.7/7.0 fps, dominated by the sea shader); not measured on the
+  desktop GPU.
+- `--selftest` (Xvfb, own user folder): **PASS, 226 ok**, twice in a row, on the tree with world v6's fixes. The hover
+  checks were flaky: the broadside block teleports her from beyond the chart's edge without snapping the camera, so it
+  was still easing across the sea when the pointer aimed at her. It now snaps (`Main.SelfTest.cs`, GC-30 style). Two
+  self-tests sharing `user://selftest/` clobber each other's suspend save: run one at a time.
+- Before/after sheets: `scratch/hull-pass/` (all 14 hulls, the shipwright, a frigate's eight points of sail).
+
 ## Next
+- Balance on the v6 world: the chart is 3× each way and ports ½–1 day apart, so re-run the autopilot batches for all
+  three presets before tuning anything (GDD §11 day targets, upkeep, provisions, Threat per day).
+- Chart screen at whole-sheet zoom: ~150 port names crowd; show names by zoom or importance.
 - Balance iteration against GDD §11 with `scratch/balance` (see `docs/BALANCE.md`). The audit changed the baseline
   (AI ships no longer freeze, broadsides aim, the Kraken retune, shot stops at land): re-run the three presets first.
 - Nolan's playtest of the whole loop (title → voyage → logbook), then iterate on look and feel.
@@ -186,6 +459,9 @@ Evidence (merged tree, 2026-09-26):
 - **His real profile:** on 09-23 some audit capture runs wrote into `~/.local/share/godot/app_userdata/Last Tide/`
   (profile.json voyages 4 → 5 plus a 0-day Rough Seas best, a stray `debug/profile.json`, rotated logs). The runners
   now refuse real user folders. Reverting the file is his call.
+- **Q quits from the pause menu** (GDD §19 "Pause", an M1 rule from before the menu existed). Q is also the port
+  broadside key, so a player who pauses mid-fight and reaches for Q closes the game. The suspend save keeps the voyage.
+  Recommendation: drop the Q shortcut and keep the menu's Quit. Not changed; it is a logged decision.
 - Git: still not under version control — `git init` + private GitHub repo? (never commit/push without his yes).
 - Steam: Steamworks account/App ID/fee, the price point, store assets (`docs/STEAM.md`).
 
