@@ -310,10 +310,10 @@ public partial class Main
         Check(hud.WeatherText.StartsWith(Text.Get("REGION_beyond")), $"out there the HUD calls it uncharted ({hud.WeatherText})");
         world.MonstersEnabled = beastsWere;
 
-        Check(world.Ship.Order == CrewOrder.Balanced, "the crew starts on the balanced order");
+        Check(world.Ship.Order == CrewOrder.Balanced, "the crew starts on the balanced split");
         Check(hud.ThreatText == Text.Get("TIER_flat_calm"), $"the Threat bar names the first tier ({hud.ThreatText})");
 
-        // Broadsides: Q/E held show the arcs, released fire; a target abeam takes a hit; 1–4 set crew orders.
+        // Broadsides: Q/E held show the arcs, released fire; a target abeam takes a hit; 1–4 no longer touch the crew.
         world.Ship.Cannons = 4;
         world.Ship.Crew = 8;
         world.Player.Cargo[(int)Good.Munitions] = 40;
@@ -346,6 +346,8 @@ public partial class Main
             hitDummy |= dummy.HullHp < hpDummy;
         }
         Check(hitDummy, "the ship abeam takes the broadside");
+        Check(hud.Callouts.BarShown(dummy.Id) && hud.Callouts.PopTexts.Any(t => int.TryParse(t, out _)),
+            $"her hit pops a figure where it struck and brings up the target's hull bar ({string.Join(" / ", hud.Callouts.PopTexts)})");
         // Hover: the pointer on a ship in sight rings her and shows her card; her own ship answers too; open water, nothing.
         var dummyAt = GetCanvasTransform() * Ink.V(dummy.Pos);
         Push(new InputEventMouseMotion { Position = dummyAt, GlobalPosition = dummyAt });
@@ -360,13 +362,48 @@ public partial class Main
         Push(new InputEventMouseMotion { Position = openAt, GlobalPosition = openAt });
         await Frames(2);
         Check(shipCard.Hovered == null, "open water under the pointer shows no card");
-        Check(hud.GunGauge.Munitions == world.Player.Units(Good.Munitions), "the HUD counts the shot left");
-        Tap(Godot.Key.Key3);
+        // A hit she takes: a red figure, and the hull tube holds the planks lost for a beat (Nolan, 2026-09-28).
+        dummy.Cannons = 2;
+        dummy.Loaded[0] = true;
+        double hpHer = world.Ship.HullHp;
+        world.Fire(dummy, LastTide.Sim.Side.Port);
+        await Until(() => world.Ship.HullHp < hpHer, 120);
+        await Until(() => hud.HullShown > hud.HullFrac + 0.001f, 10);   // the HUD reads the blow on its next frame
+        Check(world.Ship.HullHp < hpHer && hud.Callouts.PopTexts.Any(t => t.StartsWith("−")) && hud.HullShown > hud.HullFrac + 0.001f,
+            $"a hit she takes pops a red figure and the hull tube holds the planks lost ({string.Join(" / ", hud.Callouts.PopTexts)}; tube {hud.HullShown:0.00} over {hud.HullFrac:0.00})");
+        // Flotsam in sight but off the screen gets an edge mark; hauled aboard, it says what came in.
+        var barrel = new Flotsam { Pos = world.Ship.Pos + world.Ship.Forward * 300, Good = Good.Rum, Units = 2, Life = 100 };
+        world.Flotsam.Add(barrel);
+        await Until(() => hud.Markers.Any(m => m.Kind == 4), 30);
+        Check(hud.Markers.Any(m => m.Kind == 4), "a barrel in sight off the screen gets an edge mark");
+        world.Ship.Pos = barrel.Pos;
+        prevPose = curPose = (world.Ship.Pos, world.Ship.Heading);
+        await Until(() => !world.Flotsam.Contains(barrel), 30);
+        await Frames(1);
+        Check(!world.Flotsam.Contains(barrel) && hud.Callouts.PopTexts.Any(t => t.Contains(Text.Get("GOOD_rum"))),
+            $"sailing over it hauls it aboard and says what came in ({string.Join(" / ", hud.Callouts.PopTexts)})");
+        // Hailing a merchant (Nolan, 2026-09-28): within hail the prompt offers it, F asks, her prices go in the ledger.
+        var trader = world.SpawnTraffic(Role.Merchant, world.Ship.Pos + world.Ship.Right * 70);
+        world.PlanVoyage(trader);
+        trader.Vel = Vec2.Zero;
+        await Until(() => hud.DockPromptText == Text.Get("HUD_HAIL", world.NameOf(trader)), 30);
+        Check(hud.DockPromptText == Text.Get("HUD_HAIL", world.NameOf(trader)) && hud.DockPromptKey == hud.Key("Dock"),
+            $"a merchant within hail: the prompt offers to hail her ({hud.DockPromptText})");
+        string traderName = world.NameOf(trader);
+        foreach (var e in world.Player.Ledger.Where(e => e.Port == trader.Ai!.News[0].Port).ToList()) world.Player.Ledger.Remove(e);   // news she lacks
+        Tap(Godot.Key.F);
+        await Until(() => hud.NoticeShown.Contains(traderName), 90);
+        Check(hud.NoticeShown.Contains(traderName) && world.Player.Ledger.Any(e => e.Teller == traderName && e.Port == trader.Ai!.News[0].Port),
+            $"F hails her: her master's prices go into the ledger, told by her and dated her visit ({hud.NoticeShown})");
+        trader.Sunk = true;   // she sails out of the test quietly (a quiet removal, no wreckage)
         await Frames(2);
-        Check(world.Ship.Order == CrewOrder.Repair, "3 orders repair");
+        Check(hud.GunGauge.Munitions == world.Player.Units(Good.Munitions), "the HUD counts the shot left");
+        var handsBefore = world.Ship.Stations();
+        Tap(Godot.Key.Key3);
         Tap(Godot.Key.Key1);
         await Frames(2);
-        Check(world.Ship.Order == CrewOrder.Battle, "1 orders battle stations");
+        Check(world.Ship.Order == CrewOrder.Balanced && world.Ship.Stations().SequenceEqual(handsBefore),
+            "1–4 no longer switch the crew: it is set by hand on the crew panel (Nolan, 2026-09-28)");
         world.Ship.HullHp = 0;
         await Frames(2);
         Check(world.Ship.Foundering && hud.LastStandVisible, "hull gone: the last stand and its hourglass show");
@@ -470,23 +507,61 @@ public partial class Main
         world.Ship.Vel = Vec2.Zero;
         camPos = Ink.V(world.Ship.Pos);   // the spyglass check below aims through the camera: don't let it still be easing across the sea
 
-        // The crew panel: C opens it and the sim waits; + moves a hand to the guns; C closes it.
+        // The crew panel: C opens it and the sim waits; − and + move hands by hand; C closes it.
         Tap(Godot.Key.C);
         await Frames(2);
         Check(crewPanel.IsOpen && Paused, "C opens the crew panel and the sim waits");
-        Click(crewPanel.OrderButton((int)CrewOrder.MakeSail));
+        var hands = world.Ship.Stations();
+        int manned = Array.FindIndex(hands, 0, 3, n => n > 0);
+        Click(crewPanel.Minus(manned));
         await Frames(1);
-        Check(world.Ship.Order == CrewOrder.MakeSail && crewPanel.Figures(1).Count == world.Ship.Stations()[1] && crewPanel.Figures(1).Count > 0,
-            "clicking an order on the crew panel sets it, and the sailors drawn match the stations");
+        var less = world.Ship.Stations();
+        Check(world.Ship.Order == CrewOrder.Custom && less[manned] == hands[manned] - 1 && less[3] == hands[3] + 1 && crewPanel.Figures(manned).Count == less[manned],
+            $"− stands a hand down to the spare bench, and the sailors drawn follow ({string.Join(",", hands)} → {string.Join(",", less)})");
+        Click(crewPanel.Plus(manned));
+        await Frames(1);
+        Check(world.Ship.Stations().SequenceEqual(hands), "+ puts a spare hand back on the station");
         Tap(Godot.Key.Key3);
         await Frames(1);
-        Check(world.Ship.Order == CrewOrder.Repair && crewPanel.IsOpen, "3 on the open crew panel sets the order too");
-        world.SetStations(1, 2, 1);
-        Check(world.Ship.Order == CrewOrder.Custom && world.Ship.Stations()[0] == 1, "stations can be set by hand");
+        Check(crewPanel.IsOpen && world.Ship.Stations().SequenceEqual(hands), "number keys do nothing on the open panel");
         Tap(Godot.Key.C);
         await Frames(2);
         Check(!crewPanel.IsOpen, "C closes it");
-        Tap(Godot.Key.Key4);
+        world.Ship.Order = CrewOrder.Balanced;   // back to the balanced split for the checks that follow
+        await Frames(2);
+
+        // Fishing: lying still in open water the prompt offers lines; F puts them out, a catch comes over the rail with its
+        // callout, F hauls them in, and making sail past a third hauls them in too.
+        world.Ship.Pos = OpenWater(600);
+        world.Ship.Vel = Vec2.Zero;
+        world.Ship.SailTarget = 0;
+        world.Ship.SailFraction = 0;
+        world.Ship.Crew = world.Ship.Hull.CrewMax;   // plenty of spare hands, so the first fish comes quickly
+        prevPose = curPose = (world.Ship.Pos, world.Ship.Heading);
+        camPos = Ink.V(world.Ship.Pos);
+        await Frames(3);
+        Check(!world.LinesOut && hud.DockPromptText == Text.Get("HUD_FISH") && hud.DockPromptKey == hud.Key("Dock"),
+            $"lying still at sea, the prompt offers to put out lines ({hud.DockPromptText})");
+        int fishBefore = world.Player.Units(Good.Fish);
+        Tap(Godot.Key.F);
+        await Frames(2);
+        Check(world.LinesOut && hud.DockPromptText == Text.Get("HUD_FISHING", world.Fishers), $"F puts the lines out ({hud.DockPromptText})");
+        await Until(() => world.Player.Units(Good.Fish) > fishBefore, 60 * 90);
+        await Frames(1);
+        Check(world.Player.Units(Good.Fish) > fishBefore && hud.Callouts.PopTexts.Any(t => t.Contains(Text.Get("GOOD_fish"))),
+            $"a fish comes over the rail and the callout says so ({string.Join(" / ", hud.Callouts.PopTexts)})");
+        Tap(Godot.Key.F);
+        await Frames(2);
+        Check(!world.LinesOut, "F again hauls the lines in");
+        Tap(Godot.Key.F);
+        await Frames(2);
+        Tap(Godot.Key.W);
+        Tap(Godot.Key.W);
+        await Frames(3);
+        Check(!world.LinesOut && world.Notices.Contains("NOTICE_LINES_IN_SAIL"), "making sail past a third hauls them in");
+        world.Ship.SailTarget = 0;
+        world.Ship.SailFraction = 0;
+        world.Ship.Crew = 8;
         await Frames(2);
 
         // The spyglass: holding the right button extends sight along a cone toward the cursor.
@@ -572,11 +647,34 @@ public partial class Main
         title.Show("voyage");
         title.SelectPreset(Preset.Tempest);
         title.SetShipName("Test Wren");
+        nextVoyageSeed = 21;   // a board with a first job on it, the same every run
         title.PressSetSail();
         await Frames(3);
-        Check(!title.IsOpen && world.Preset == Preset.Tempest && world.Player.ShipName == "Test Wren" && !Paused && world.Ticks > 0,
-            "Set sail starts a voyage on the chosen preset with the chosen name");
+        Check(!title.IsOpen && world.Preset == Preset.Tempest && world.Player.ShipName == "Test Wren" && !paused
+              && world.Docked == world.Map.StartPort && portScreen.IsOpen && world.Ticks == 0,
+            "Set sail starts a voyage on the chosen preset with the chosen name, alongside the home quay with the ledger open");
         Check(profile.LastShipName == "Test Wren" && profile.LastPreset == "Tempest", "the profile remembers the choice");
+        // A first job from the home board (clicked in the office), so the edge mark at sea has a port to point at.
+        var firstBoard = world.ContractOffers(world.Docked!);
+        int firstSlot = Array.FindIndex(firstBoard, c => c is { Kind: not ContractKind.Contraband });
+        var job = firstSlot >= 0 ? firstBoard[firstSlot] : null;
+        if (job != null)
+        {
+            Click(portScreen.Tabs[3]);
+            await Frames(1);
+            Click(portScreen.SignButton(firstSlot));
+            await Frames(1);
+        }
+        Check(job != null && world.Player.Contracts.Count == 1 && world.Player.Contracts[0].Offer == job.Offer,
+            $"the home office has a first job and Sign (clicked) takes it ({job?.Kind} for {(job != null ? world.Map.Ports[job.To].Name : "none")})");
+        Tap(Godot.Key.Escape);
+        await Frames(3);
+        Check(!world.IsDocked && !portScreen.IsOpen, "Esc on the ledger casts off");
+        await Until(() => hud.Markers.Any(m => m.Kind == 3 && !string.IsNullOrEmpty(m.Label)), 60);
+        var toward = hud.Markers.FirstOrDefault(m => m.Kind == 3);
+        string bound = job != null ? world.Map.Ports[job.To].Name : "?";
+        Check(toward.Kind == 3 && toward.Label?.StartsWith(bound) == true && toward.Label.Contains(Text.Get("HUD_DAY_N", 1 + (int)Math.Floor(job!.Deadline))),
+            $"at sea an edge mark points the way to the delivery, with the day it is due ({toward.Label} at {toward.At}; marks {hud.Markers.Count})");
         Tap(Godot.Key.Escape);
         await Frames(1);
         Check(pauseMenu.IsOpen && Paused, "Esc opens the pause menu");
@@ -652,6 +750,9 @@ public partial class Main
         Tap(Godot.Key.Enter);   // Enter in the name field sets sail (audit R-5)
         await Frames(2);
         Check(!title.IsOpen && world.Preset == Preset.RoughSeas && world.Player.ShipName.Length > 0, "a blank name gets a random one");
+        Check(world.IsDocked && portScreen.IsOpen, "and she opens in port too");
+        LeavePort();
+        await Frames(2);
 
         // Audio: every loop loaded, the sea is audible, a sail change and a broadside make their sounds, harbour bustle in port.
         Check(audio.Loaded, "all eleven ambience loops loaded from assets/audio");
@@ -819,6 +920,10 @@ public partial class Main
         Click(portScreen.Tabs[3]);
         await Frames(1);
         Check(portScreen.Page == 3 && portScreen.FocusOnPage(3), "the harbour office tab (clicked) opens its page");
+        var wantedBoard = world.WantedNotices(home);
+        Check(portScreen.WantedShown.Count() == wantedBoard.Count && portScreen.WantedNoneShown == (wantedBoard.Count == 0)
+              && portScreen.WantedShown.All(t => !t.Contains(" gold")),
+            $"the office posts what nearby ports want, in words ({string.Join(" / ", portScreen.WantedShown)})");
         var board = world.ContractOffers(home);
         int onBoard = Array.FindIndex(board, c => c != null);
         Check(onBoard >= 0, "the home port's office has work on its board");

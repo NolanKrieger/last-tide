@@ -57,7 +57,14 @@ public sealed class Wreck
 /// <summary>The archipelago for one run: regions, islands, ports, treasure, wrecks and the nav grid.</summary>
 public sealed class Map
 {
-    public const double Width = 18000, Height = 13500;
+    /// <summary>
+    /// How much farther apart generator v7 sets everything than v6's 18 × 13.5 km chart (Nolan, 2026-09-28: "make the
+    /// distance between the islands bigger and subsequently the size of the map bigger"). The islands keep their size and
+    /// number; the sea between them, the chart and every map-scale distance (region borders, merchant runs, contracts)
+    /// grow by this factor.
+    /// </summary>
+    public const double Stretch = 1.4;
+    public const double Width = 18000 * Stretch, Height = 13500 * Stretch;
     public const double HalfW = Width / 2, HalfH = Height / 2;
 
     public int Seed;
@@ -84,17 +91,18 @@ public sealed class Map
     /// <summary>The noise warp applied before the nearest-seed test, so borders wander instead of running straight.</summary>
     Vec2 Warp(Vec2 p)
     {
-        double wx = Noise.Value3(Seed + 31, p.X / 2400, p.Y / 2400, 0.3) * 900 + Noise.Value3(Seed + 33, p.X / 800, p.Y / 800, 0.3) * 260;
-        double wy = Noise.Value3(Seed + 32, p.X / 2400, p.Y / 2400, 0.7) * 900 + Noise.Value3(Seed + 34, p.X / 800, p.Y / 800, 0.7) * 260;
+        const double Big = 2400 * Stretch, Small = 800 * Stretch;
+        double wx = Noise.Value3(Seed + 31, p.X / Big, p.Y / Big, 0.3) * 900 * Stretch + Noise.Value3(Seed + 33, p.X / Small, p.Y / Small, 0.3) * 260 * Stretch;
+        double wy = Noise.Value3(Seed + 32, p.X / Big, p.Y / Big, 0.7) * 900 * Stretch + Noise.Value3(Seed + 34, p.X / Small, p.Y / Small, 0.7) * 260 * Stretch;
         return new Vec2(p.X + wx, p.Y + wy);
     }
 
     /// <summary>
     /// Squared-distance margin over which the weather of two regions blends at their border. With region seeds
-    /// ~4.5 km apart, a neighbour's weight falls smoothly from ½ on the border to 0 about 100 m inside it — some
+    /// ~6.3 km apart, a neighbour's weight falls smoothly from ½ on the border to 0 about 100 m inside it — some
     /// 8 s at a sloop's best speed.
     /// </summary>
-    public const double BorderBlendSq = 2 * 4500 * 100;
+    public const double BorderBlendSq = 2 * 4500 * Stretch * 100;
 
     /// <summary>
     /// How much of each region's weather is felt at a point (indexed like <see cref="Regions"/>, summing to 1).

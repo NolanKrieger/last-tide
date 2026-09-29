@@ -130,9 +130,11 @@ public sealed partial class World
         MarinesTick();
         Mark("monsters");
         CombatTick(input);
+        DriftTick();
         Mark("combat+fleet");
         MatchMaps();
         ActionTick(input.Action);
+        FishingTick();
         OfficeTick();
         AchievementsTick();
         Mark("exploration");
@@ -233,7 +235,7 @@ public sealed partial class World
         h.Add(Others.Count); h.Add(Balls.Count); h.Add(Flotsam.Count);
         h.Add(Lantern ? 1 : 0); h.Add(Ship.TornSails ? 1 : 0); h.Add(Weather.Storms.Count);
         foreach (var g in Ship.Parts) h.Add(g);
-        h.Add(Director.QuietFor); h.Add(RescuedAt.Count); h.Add(Player.Unique.Count); h.Add(Player.BottleMaps.Count); h.Add(Player.Cosmetics.Count); h.Add(Digging ? 1 : 0); h.Add(DigProgress);
+        h.Add(Director.QuietFor); h.Add(RescuedAt.Count); h.Add(Player.Unique.Count); h.Add(Player.BottleMaps.Count); h.Add(Player.Cosmetics.Count); h.Add(Digging ? 1 : 0); h.Add(DigProgress); h.Add(LinesOut ? 1 : 0); h.Add(FishCatch);
         foreach (var c in Player.Loadout) h.Add(c.Length == 0 ? 0 : c.Sum(ch => (long)ch));
         h.Add(Player.Officers.Count); h.Add(Ship.Hull.Id.Length);
         h.Add(Monster == null ? -1 : (int)Monster.Type); h.Add(Monster?.Hp ?? 0); h.Add(MonsterClock); h.Add(Eruptions.Count); h.Add(Player.Achievements.Count);
@@ -265,13 +267,17 @@ public sealed partial class World
         {
             h.Add(o.Id); h.Add(o.Vel.X); h.Add(o.Vel.Y); h.Add(o.Heading); h.Add(o.AngVel); h.Add(o.Rudder);
             h.Add(o.SailFraction); h.Add(o.Water); h.Add(o.Leaks); h.Add(Captains.ContainsKey(o.Id) ? 1 : 0);
-            if (o.Ai is { } ai) { h.Add(ai.DestPort); h.Add(ai.PathIndex); h.Add(ai.Wait); h.Add(ai.TargetShip); h.Add(ai.Path.Count); }
+            if (o.Ai is { } ai)
+            {
+                h.Add(ai.DestPort); h.Add(ai.PathIndex); h.Add(ai.Wait); h.Add(ai.TargetShip); h.Add(ai.Path.Count);
+                foreach (var n in ai.News) { h.Add(n.Port); h.Add(n.Day); }
+            }
         }
         foreach (var b in Balls) { h.Add(b.Pos.X); h.Add(b.Pos.Y); h.Add(b.Life); }
         foreach (var f in Flotsam) { h.Add(f.Pos.X); h.Add(f.Pos.Y); h.Add(f.Life); }
         h.Add(Stats.GoldEarned); h.Add(Stats.ShipsSunk); h.Add(Stats.LeaguesSailed); h.Add(Stats.TreasuresDug);
         h.Add(Stats.CovesFound); h.Add(Stats.MonstersBeaten); h.Add(Stats.RegionsEntered.Count);
-        foreach (var e in Player.Ledger) { h.Add(e.Port); h.Add(e.Price); h.Add(e.Day); }
+        foreach (var e in Player.Ledger) { h.Add(e.Port); h.Add(e.Price); h.Add(e.Day); h.Add(e.Teller); }
         foreach (var m in Player.BottleMaps) { h.Add(m.Treasure); h.Add(m.Solved ? 1 : 0); h.Add(m.Rotation); }
         foreach (var o in Player.Officers) { h.Add((int)o.Type); h.Add(o.Tier); }
         h.Add(RudderJam); h.Add(SirenPull); h.Add(EruptionClock); h.Add(MonsterHitTime); h.Add(WhirlpoolHitTime); h.Add(coreClock); h.Add(IceHitTime); h.Add(lastUpkeepDay); h.Add(tradedThisVisit ? 1 : 0);

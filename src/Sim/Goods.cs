@@ -8,14 +8,15 @@ public enum Good
     Rum, Cloth, Tools, Muskets, Wine,
     Spices, Silk, Porcelain, Pearls,
     Ambergris, Emeralds, Relics,
+    Fish,   // caught, never made or sold by a port (added last: the older goods keep their indices)
 }
 
-public enum GoodGroup { Consumable, ShipStores, Produce, Manufactured, Luxury, Rare }
+public enum GoodGroup { Consumable, ShipStores, Produce, Manufactured, Luxury, Rare, Catch }
 
 /// <summary>One row of the goods table (GDD §6). <see cref="SlotsPerUnit"/> encodes bulk: timber 2, pearls 0.2.</summary>
 public sealed record GoodDef(Good Id, string Key, GoodGroup Group, int BasePrice, double SlotsPerUnit);
 
-/// <summary>The 27 goods, decided in GDD §6 with base prices as drafted.</summary>
+/// <summary>The 27 trade goods, decided in GDD §6 with base prices as drafted, and the fish she catches herself (§19).</summary>
 public static class Goods
 {
     public static readonly GoodDef[] All =
@@ -47,14 +48,17 @@ public static class Goods
         new(Good.Ambergris, "ambergris", GoodGroup.Rare, 220, 1),
         new(Good.Emeralds, "emeralds", GoodGroup.Rare, 260, 0.2),
         new(Good.Relics, "relics", GoodGroup.Rare, 300, 1),
+        new(Good.Fish, "fish", GoodGroup.Catch, 4, 0.25),   // the crew eats it before provisions; it spoils (World.Fishing)
     };
 
-    public const int Count = 27;
+    public const int Count = 28;
 
     public static GoodDef Of(Good g) => All[(int)g];
 
     public static bool IsRare(Good g) => Of(g).Group == GoodGroup.Rare;
     public static bool IsLuxury(Good g) => Of(g).Group == GoodGroup.Luxury;
+    /// <summary>Goods ports make, stock and sell (all but the catch, which only she brings in and ports only buy).</summary>
+    public static bool IsTraded(Good g) => Of(g).Group != GoodGroup.Catch;
 
     /// <summary>Hold slots taken by <paramref name="units"/> of a good, rounded up.</summary>
     public static int Slots(Good g, int units) => (int)Math.Ceiling(units * Of(g).SlotsPerUnit - 1e-9);

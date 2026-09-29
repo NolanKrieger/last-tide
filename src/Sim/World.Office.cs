@@ -11,7 +11,7 @@ public sealed partial class World
 {
     public const int MaxContracts = 3;
     /// <summary>Sea distance an office will send her, in metres: not the next cove over, not across the whole chart.</summary>
-    public const double OfferMinDistance = 350, OfferMaxDistance = 2800;
+    public const double OfferMinDistance = 350 * Map.Stretch, OfferMaxDistance = 2800 * Map.Stretch;
     /// <summary>Metres of sea a lean sloop makes good in a day, tacks and all: the yardstick for deadlines.</summary>
     public const double PassageMetresPerDay = 700;
     public const double ContractDoneRep = 2, ContractFailRep = 6;

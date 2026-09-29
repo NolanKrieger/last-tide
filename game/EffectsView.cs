@@ -163,9 +163,12 @@ public partial class EffectsView : Node2D
                     break;
                 case CombatEventType.Sink: Sinking(e, at); break;
                 case CombatEventType.Collect:
-                    for (int i = 0; i < 10; i++) Add(Kind.Glint, at, Rand(55), 0.8f, 2.5f, rot: Rnd() * 6, tint: e.Strength > 0 ? Cosmetic.Gold : Foam);
-                    Add(Kind.Ring, at, Vector2.Zero, 0.7f, 10, water: true);
+                {
+                    bool fish = e.Good == (int)Good.Fish;   // a fish every half minute or so: a few drops, not a shower
+                    for (int i = 0; i < (fish ? 3 : 10); i++) Add(Kind.Glint, at, Rand(fish ? 25 : 55), 0.8f, 2.5f, rot: Rnd() * 6, tint: e.Good < 0 && e.Strength > 0 ? Cosmetic.Gold : Foam);
+                    Add(Kind.Ring, at, Vector2.Zero, 0.7f, fish ? 6 : 10, water: true);
                     break;
+                }
                 case CombatEventType.Rescued:
                     Add(Kind.Ring, at, Vector2.Zero, 2f, 40, water: true);
                     Add(Kind.Ring, at, Vector2.Zero, 2f, 24, 0.3f, water: true);

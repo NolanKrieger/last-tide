@@ -1,7 +1,7 @@
 namespace LastTide.Sim;
 
-public enum PortAction { Dock, CastOff, Buy, Sell, Repair, Hire, Rumor, BuyCannon, SellCannon, BuyHull, BuyPart, HireOfficer, DismissOfficer, BuyUnique, BuyMap,
-    CrewOrder, CrewStations,    // the crew panel: at sea or in port, logged so replays see it
+public enum PortAction { Dock, CastOff, Buy, Sell, Repair, Hire, BuyCannon, SellCannon, BuyHull, BuyPart, HireOfficer, DismissOfficer, BuyUnique, BuyMap,
+    CrewStations,               // the crew panel's hands per station: at sea or in port, logged so replays see it
     SignContract, AbandonContract }   // the harbour office: Amount is the board slot / the contract's index
 
 /// <summary>An action taken in port (GDD §13). Logged with its tick so a run replays. <see cref="Text"/> carries a hull id.</summary>
@@ -13,7 +13,6 @@ public enum PortResult { Ok, NotInHarbor, PortClosed, NotDocked, NoGold, NoRoom,
 
 public sealed partial class World
 {
-    public const int RumorPrice = 15;
     public const int SigningFee = 10;
     public const int CannonPrice = 80;
     public const int TornSailRepair = 25;
@@ -96,7 +95,7 @@ public sealed partial class World
                 if (HasCartographer) port.Discovered = true;
                 bool firstVisit = Player.PortsVisited.Add(port.Id);
                 foreach (var g in Goods.All)
-                    Player.Remember(port.Id, g.Id, port.Market.Price(g.Id), DaysSurvived, false);
+                    Player.Remember(port.Id, g.Id, port.Market.Price(g.Id), DaysSurvived);
                 if (Player.Unpaid)
                 {
                     int leaving = (int)Math.Ceiling(Ship.Crew * 0.3);
@@ -124,10 +123,6 @@ public sealed partial class World
                 if (Docked == null) return PortResult.NotDocked;
                 Docked = null;
                 return PortResult.Ok;
-            case PortAction.CrewOrder:
-                if (cmd.Amount is < 0 or > 3) return PortResult.Nothing;
-                Ship.Order = (CrewOrder)cmd.Amount;
-                return PortResult.Ok;
             case PortAction.CrewStations:
                 SetStations(cmd.Amount & 1023, (cmd.Amount >> 10) & 1023, (cmd.Amount >> 20) & 1023);
                 return PortResult.Ok;
@@ -141,6 +136,7 @@ public sealed partial class World
                 int units = cmd.Amount;
                 if (units <= 0) return PortResult.Nothing;
                 if (Goods.IsRare(cmd.Good) && !Docked.Secret) return PortResult.NoStock;   // rare goods come from coves and treasure only
+                if (!Goods.IsTraded(cmd.Good)) return PortResult.NoStock;   // ports buy fish; they don't sell it
                 if (market.Stock[(int)cmd.Good] < units) return PortResult.NoStock;
                 if (Player.SlotsUsed + units * Goods.Of(cmd.Good).SlotsPerUnit > Ship.CargoCapacity + 1e-9) return PortResult.NoRoom;
                 int cost = BuyQuote(cmd.Good, units);
@@ -149,7 +145,7 @@ public sealed partial class World
                 Player.Bought(Docked.Id, cmd.Good, units, cost);
                 market.TakeStock(cmd.Good, units);
                 Trade();
-                Player.Remember(Docked.Id, cmd.Good, market.Price(cmd.Good), DaysSurvived, false);
+                Player.Remember(Docked.Id, cmd.Good, market.Price(cmd.Good), DaysSurvived);
                 return PortResult.Ok;
             }
             case PortAction.Sell:
@@ -170,7 +166,7 @@ public sealed partial class World
                     Stats.BestTradeGood = Goods.Of(cmd.Good).Key;
                 }
                 Trade();
-                Player.Remember(Docked.Id, cmd.Good, market.Price(cmd.Good), DaysSurvived, false);
+                Player.Remember(Docked.Id, cmd.Good, market.Price(cmd.Good), DaysSurvived);
                 return PortResult.Ok;
             }
             case PortAction.Repair:
@@ -211,6 +207,7 @@ public sealed partial class World
                 if (cost > Player.Gold) return PortResult.NoGold;
                 Player.Gold -= cost;
                 Ship.Crew += n;
+                ManNewHands();
                 return PortResult.Ok;
             }
             case PortAction.BuyCannon:
@@ -237,30 +234,10 @@ public sealed partial class World
             case PortAction.BuyPart: return cmd.Amount >= 0 && cmd.Amount < PartDef.All.Length ? BuyPart((Part)cmd.Amount) : PortResult.Nothing;
             case PortAction.HireOfficer: return HireOfficer(cmd.Amount / 10, cmd.Amount % 10);
             case PortAction.DismissOfficer: return DismissOfficer(cmd.Amount);
-            case PortAction.Rumor:
-            {
-                if (Player.Gold < RumorPrice) return PortResult.NoGold;
-                LastRumorWasCove = false;
-                if (Rng.NextDouble() < 0.3 && RumorOfCove())
-                {
-                    Player.Gold -= RumorPrice;
-                    return PortResult.Ok;
-                }
-                var candidates = Map.Ports.Where(p => p != Docked && !p.Secret).ToList();
-                var port = candidates[Rng.Next(candidates.Count)];
-                var pool = port.Consumes.Count > 0 && Rng.NextDouble() < 0.6 ? port.Consumes : port.Produces;
-                var good = pool[Rng.Next(pool.Count)];
-                Player.Gold -= RumorPrice;
-                Player.Remember(port.Id, good, port.Market.Price(good), DaysSurvived, true);
-                port.Discovered = true;
-                LastRumor = (port.Id, good);
-                return PortResult.Ok;
-            }
         }
         return PortResult.Nothing;
     }
 
-    public (int Port, Good Good)? LastRumor { get; private set; }
     /// <summary>False colours (black market): reputations mend twice as fast.</summary>
     double RepDecay => HasUnique("false_colours") ? 4 : 2;
 
@@ -288,8 +265,12 @@ public sealed partial class World
             Notices.Enqueue("NOTICE_UNPAID");
         }
         int food = DailyProvisions;
+        int fish = Math.Min(food, Player.Cargo[(int)Good.Fish]);   // fresh fish first, before it turns
+        Player.Remove(Good.Fish, fish);
+        food -= fish;
         int have = Player.Cargo[(int)Good.Provisions];
         Player.Remove(Good.Provisions, food);   // what is eaten takes its share of the cost basis with it
+        SpoilFish();
         if (have < food)
         {
             if (Ship.Crew > 1)

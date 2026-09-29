@@ -24,7 +24,7 @@ public sealed partial class World
         }
     }
     public Wreck? WreckHere => Map.Wrecks.FirstOrDefault(w => !w.Salvaged && w.Pos.DistanceTo(Ship.Pos) <= w.RingRadius);
-    /// <summary>The dig site here is workable only once its map is matched (or it was found by rumor).</summary>
+    /// <summary>The dig site here is workable only once its map is matched.</summary>
     public bool CanDigHere => DigSiteHere is { } t && Player.BottleMaps.Any(m => m.Treasure == t.Id && m.Solved);
     public bool CanSalvageHere => WreckHere != null;
     /// <summary>The action in progress is a wreck salvage (10 s), not a dig (15 s): read-only, for the HUD's prompt.</summary>
@@ -130,9 +130,19 @@ public sealed partial class World
             return;
         }
         if (!pressed) return;
+        if (!site && !wreck && !LinesOut && HailableMerchant is { } merchant)
+        {
+            Hail(merchant);   // a merchant within hail answers before the lines go out (lines already out: F hauls them in)
+            return;
+        }
+        if (!site && !wreck)
+        {
+            ToggleLines();   // anywhere else at sea the key puts the lines out (World.Fishing)
+            return;
+        }
         if (Ship.SailTarget != 0 || Ship.SailFraction >= 0.05)
         {
-            if (site || wreck) Notices.Enqueue("NOTICE_FURL_FIRST");
+            Notices.Enqueue("NOTICE_FURL_FIRST");
             return;
         }
         if (site) { Digging = true; digWreck = false; DigProgress = 0; }
@@ -202,20 +212,6 @@ public sealed partial class World
         Notices.Enqueue("NOTICE_COSMETIC_" + pick);
     }
 
-    /// <summary>A tavern rumor may point at a cove instead of a price (GDD §10).</summary>
-    bool RumorOfCove()
-    {
-        var coves = Map.Ports.Where(p => p.Secret && !p.Discovered && !Player.CoveHints.Any(h => h.Port == p.Id)).ToList();
-        if (coves.Count == 0) return false;
-        var cove = coves[Rng.Next(coves.Count)];
-        var offset = Vec2.FromAngle(Rng.Range(0, Angles.Tau)) * Rng.Range(0, 250);
-        Player.CoveHints.Add(new CoveHint { Port = cove.Id, X = cove.Harbor.X + offset.X, Y = cove.Harbor.Y + offset.Y, Radius = 400 });
-        LastRumor = null;
-        LastRumorWasCove = true;
-        return true;
-    }
-
-    public bool LastRumorWasCove { get; private set; }
 
     // ---- Achievements that watch the run (GDD §14) ----
     void AchievementsTick()
@@ -231,6 +227,5 @@ public sealed partial class World
         if (Preset == Preset.CalmSeas && Day >= 10) Unlock("fair_winds");
         if (Preset == Preset.RoughSeas && Day >= 15) Unlock("heavy_weather");
         if (Preset == Preset.Tempest && Day >= 12) Unlock("eye_of_the_storm");
-        Player.CoveHints.RemoveAll(h => Map.Ports[h.Port].Discovered);
     }
 }

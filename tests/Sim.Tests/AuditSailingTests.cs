@@ -378,7 +378,7 @@ public class AuditSailingTests
             w.Ship.Vel = Vec2.Zero;
             w.Tick(new ShipInput(0, 0));
             double speed = StormShare(), rain = w.ConditionsAt(w.Ship.Pos).Rain;
-            worstWind = Math.Max(worstWind, Math.Abs(speed - prevSpeed));
+            worstWind = Math.Max(worstWind, Math.Abs(speed - prevSpeed) / prevSpeed);   // relative: a cell can treble the wind
             worstRain = Math.Max(worstRain, Math.Abs(rain - prevRain));
             peak = Math.Max(peak, rain);
             prevSpeed = speed;
@@ -386,8 +386,9 @@ public class AuditSailingTests
         }
         Assert.Empty(w.Weather.Storms);
         Assert.True(peak > 0.6, $"the storm never blew (rain peaked at {peak:F2})");
-        // The gusts inside a cell swing ±35% every 3.7 s (a few hundredths a tick); blowing out used to drop ~1.8× at once.
-        Assert.True(worstWind < 0.12, $"the storm's share of the wind jumped {worstWind:F2}× in one tick");
+        // The gusts inside a cell swing ±35% every 3.7 s (a few hundredths of the share a tick, 2–4% measured across seeds);
+        // blowing out used to drop ~1.8× at once (~44%). An absolute cap of 0.12 failed wherever the cell trebled the wind.
+        Assert.True(worstWind < 0.07, $"the storm's share of the wind jumped {worstWind:P0} in one tick");
         Assert.True(worstRain < 0.05, $"the rain jumped {worstRain:F2} in one tick");
     }
 
@@ -518,7 +519,7 @@ public class AuditSailingTests
     [Fact]
     public void TheSpyglassIsReplayedWithTheHelm()
     {
-        // The glass inks the chart and spots ports (which changes what a tavern rumour can point at), so a replay
+        // The glass inks the chart and spots ports (which changes what the chart and the ledger can show), so a replay
         // must see it: it used to be set on the world beside the input, and replays sailed blind.
         // A home harbour within the glass's reach of uncharted water: the Trade Isles start charted, so on the 18 km
         // chart many homes lie too deep inside them. Take the first seed whose home is near their edge.
@@ -703,7 +704,6 @@ public class AuditSailingTests
         Add("a barrel of good 99", d => d["Flotsam"] = System.Text.Json.Nodes.JsonNode.Parse("[{\"Good\":99,\"Units\":3,\"Life\":30}]"));
         Add("beast 42", d => { d["MonsterType"] = 42; d["MonsterData"] = System.Text.Json.Nodes.JsonNode.Parse("[0,0,0,0,0,10,1,0,0,0,0,0,0,0,1]"); });
         Add("an officer of tier 9", d => d["Officers"] = System.Text.Json.Nodes.JsonNode.Parse("[[0,9]]"));
-        Add("a rumour of port 999", d => d["CoveHints"] = System.Text.Json.Nodes.JsonNode.Parse("[{\"Port\":999,\"Radius\":400}]"));
         Add("a price from port 999", d => d["Ledger"]!.AsArray().Add(System.Text.Json.Nodes.JsonNode.Parse("{\"Port\":999,\"Good\":0,\"Price\":9}")));
         Add("hull 'raft'", d => d["Hull"] = "raft");
         Add("two words of dice", d => d["Rng"] = System.Text.Json.Nodes.JsonNode.Parse("[1,2]"));
@@ -726,11 +726,10 @@ public class AuditSailingTests
         for (int t = 0; t < 900; t++)
         {
             if (t == 100) Assert.Equal(PortResult.Ok, a.Apply(World.CrewStationsCommand(0, 1, 2)));
-            if (t == 500) Assert.Equal(PortResult.Ok, a.Apply(new PortCommand(PortAction.CrewOrder, Amount: (int)CrewOrder.Battle)));
+            if (t == 500) Assert.Equal(PortResult.Ok, a.Apply(World.CrewStationsCommand(2, 2, 0)));
             a.Tick(Scripted(script, t));
         }
-        Assert.Equal(CrewOrder.Battle, a.Ship.Order);
-        Assert.Equal(PortResult.Nothing, a.Apply(new PortCommand(PortAction.CrewOrder, Amount: 7)));
+        Assert.Equal(CrewOrder.Custom, a.Ship.Order);
         var r = World.Replay(a.Seed, a.HullId, a.Log, a.Commands, a.Ticks);
         Assert.Equal(a.Ship.Order, r.Ship.Order);
         Assert.Equal(a.Ship.CustomStations, r.Ship.CustomStations);

@@ -207,22 +207,12 @@ public class EconomyTests
     }
 
     [Fact]
-    public void TheTavernSellsRumorsHandsAndCannons()
+    public void TheTavernSellsHandsAndCannons()
     {
         var w = World.NewRun(4);
-        w.Player.Gold = 500;
-        // Three rumours in ten point at a cove; with every cove known it can only be a price
-        // (the test used to rely on seed 4's first roll).
-        foreach (var cove in w.Map.Ports.Where(p => p.Secret)) cove.Discovered = true;
+        w.Player.Gold = 485;   // the tavern's rumours are gone (Nolan, 2026-09-28): prices are learned in port or from a hail
         Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.Dock)));
-        int ledger = w.Player.Ledger.Count;
-        Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.Rumor)));
-        Assert.Equal(485, w.Player.Gold);
-        Assert.NotNull(w.LastRumor);
-        var entry = w.Player.Ledger.Last();
-        Assert.True(entry.Rumor);
-        Assert.NotEqual(w.Docked!.Id, entry.Port);
-        Assert.True(w.Map.Ports[entry.Port].Discovered);
+        Assert.All(w.Player.Ledger, e => Assert.Equal(w.Docked!.Id, e.Port));   // docking records only this port's prices
         Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.Hire, Good.Provisions, 3)));
         Assert.Equal(7, w.Ship.Crew);
         Assert.Equal(455, w.Player.Gold);
@@ -251,7 +241,6 @@ public class EconomyTests
         var w2 = World.NewRun(6);
         Assert.Equal(PortResult.Ok, w2.Apply(new PortCommand(PortAction.Dock)));
         Assert.Equal(PortResult.Ok, w2.Apply(new PortCommand(PortAction.Buy, good, 2)));
-        Assert.Equal(PortResult.Ok, w2.Apply(new PortCommand(PortAction.Rumor)));
         Assert.Equal(PortResult.Ok, w2.Apply(new PortCommand(PortAction.CastOff)));
         for (int t = 0; t < 400; t++) w2.Tick(new ShipInput(-0.2, t == 10 ? 2 : 0));
         var replayed = World.Replay(6, "sloop", w2.Log, w2.Commands, w2.Ticks);

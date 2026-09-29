@@ -377,6 +377,9 @@ public partial class Hud : CanvasLayer
     HudCanvas canvas = null!;
     EdgeMarkers markers = null!;
     SunkCanvas sunk = null!;
+    Callouts callouts = null!;
+    /// <summary>Hit figures, hull bars and pickups on the sea (Main feeds it each tick's events).</summary>
+    public Callouts Callouts => callouts;
     internal float OverAge;
     internal World World = null!;
 
@@ -393,10 +396,13 @@ public partial class Hud : CanvasLayer
     internal float SailFraction;
     internal string SailName = "", SpeedText = "", PointName = "";
     internal float HullFrac = 1, WaterFrac;
+    /// <summary>The hull tube's flash when a blow lands (1 → 0), and the fraction it still draws while the lost planks drain.</summary>
+    internal float HullHit, HullShown = 1;
+    float hullHold;
+    bool hullSeen;
     internal int Leaks;
     internal readonly GunGauge Guns = new();
     internal readonly int[] Stations = new int[4];
-    internal string OrderName = "";
     internal string GoldText = "", HoldText = "", CrewText = "", ShipName = "", HullName = "";
     internal int Provisions, Munitions, Timber;
     internal bool ProvisionsLow, MunitionsLow;
@@ -427,7 +433,7 @@ public partial class Hud : CanvasLayer
 
     long kWindKn = long.MinValue, kWindFrom = long.MinValue, kHeading = long.MinValue, kDay = long.MinValue, kWatch = long.MinValue,
         kCond = long.MinValue, kTier = long.MinValue, kSail = long.MinValue, kSpeed = long.MinValue, kPoint = long.MinValue,
-        kOrder = long.MinValue, kGold = long.MinValue, kHold = long.MinValue, kCrew = long.MinValue, kStores = long.MinValue,
+        kGold = long.MinValue, kHold = long.MinValue, kCrew = long.MinValue, kStores = long.MinValue,
         kStations = long.MinValue, kPrompt = long.MinValue, kStand = long.MinValue, kHarbour = long.MinValue, kPct = long.MinValue,
         kOver = long.MinValue;
     readonly Dictionary<string, string> keyCache = new();
@@ -508,7 +514,7 @@ public partial class Hud : CanvasLayer
         label = KeyLabel?.Invoke(action) ?? action switch
         {
             "SailUp" => "W", "SailDown" => "S", "Port" => "A", "Starboard" => "D", "FirePort" => "Q", "FireStarboard" => "E",
-            "Crew" => "C", "Lantern" => "L", "Dock" => "F", "Chart" => "M", "Order1" => "1", "Order2" => "2", "Order3" => "3", "Order4" => "4", _ => "?",
+            "Crew" => "C", "Lantern" => "L", "Dock" => "F", "Chart" => "M", _ => "?",
         };
         keyCache[action] = label;
         return label;
@@ -518,6 +524,10 @@ public partial class Hud : CanvasLayer
     {
         Layer = 10;
         World = world;
+        // Under the plates: the figures rise from the sea and pass behind the instruments.
+        callouts = new Callouts { Hud = this };
+        callouts.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        AddChild(callouts);
         canvas = new HudCanvas { Hud = this };
         canvas.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         AddChild(canvas);
@@ -573,8 +583,8 @@ public partial class Hud : CanvasLayer
         return key switch
         {
             "NOTICE_COVE" or "NOTICE_BY_A_HAIR" or "NOTICE_MONSTER_BEATEN" or "NOTICE_MONSTER_ESCAPED" or "NOTICE_MAP_MATCHED"
-                or "NOTICE_TREASURE" or "NOTICE_SALVAGE" or "NOTICE_BOUNTY" => NoticeKind.Good,
-            "NOTICE_BOTTLE_MAP" or "NOTICE_DIG_INTERRUPTED" or "NOTICE_FURL_FIRST" or "NOTICE_SEARCH_CLEAR" or "NOTICE_NO_CARTOGRAPHER" => NoticeKind.Info,
+                or "NOTICE_TREASURE" or "NOTICE_SALVAGE" or "NOTICE_BOUNTY" or "NOTICE_FLOTSAM_PORT" or "NOTICE_FLOTSAM_STARBOARD" or "NOTICE_HAIL" => NoticeKind.Good,
+            "NOTICE_BOTTLE_MAP" or "NOTICE_DIG_INTERRUPTED" or "NOTICE_FURL_FIRST" or "NOTICE_SEARCH_CLEAR" or "NOTICE_NO_CARTOGRAPHER" or "NOTICE_HAIL_STALE" or "NOTICE_HAIL_NONE" => NoticeKind.Info,
             _ => NoticeKind.Danger,
         };
     }
@@ -686,6 +696,14 @@ public partial class Hud : CanvasLayer
 
         var player = world.Player;
         HullFrac = (float)Math.Clamp(ship.HullHp / ship.MaxHp, 0, 1);
+        // A blow: the planks lost stay marked in the tube for a beat, then drain down to what is left.
+        if (!hullSeen) { HullShown = HullFrac; hullSeen = true; }   // a resumed voyage opens on her hull as it is
+        if (HullHit >= 1) hullHold = 0.4f;
+        // Timed on a frame's worth at most, so a hitch on the frame of the blow cannot skip the mark.
+        float step = Math.Min(live, 1 / 20f);
+        if (HullShown < HullFrac) HullShown = HullFrac;
+        else if ((hullHold -= step) <= 0) HullShown = Mathf.MoveToward(HullShown, HullFrac, step * 0.5f);
+        HullHit = Math.Max(0, HullHit - dt * 1.8f);
         WaterFrac = (float)Math.Clamp(ship.Water / 100, 0, 1);
         long pct = Mathf.RoundToInt(HullFrac * 100) * 1000L + Mathf.RoundToInt(WaterFrac * 100);
         if (pct != kPct) { kPct = pct; HullPct = (pct / 1000).ToString(CultureInfo.InvariantCulture) + "%"; WaterPct = (pct % 1000).ToString(CultureInfo.InvariantCulture) + "%"; }
@@ -711,7 +729,6 @@ public partial class Hud : CanvasLayer
             kStations = stations;
             for (int i = 0; i < 4; i++) { Stations[i] = st[i]; StationText[i] = st[i].ToString(CultureInfo.InvariantCulture); }
         }
-        if ((long)ship.Order != kOrder) { kOrder = (long)ship.Order; OrderName = Text.Get("ORDER_NAME_" + ship.Order.ToString().ToUpperInvariant()); }
 
         if (lastGold != int.MinValue && player.Gold != lastGold) GoldPulse = 1;
         lastGold = player.Gold;
@@ -721,30 +738,35 @@ public partial class Hud : CanvasLayer
         long crew = ship.Crew * 10000L + ship.Hull.CrewMax;
         if (crew != kCrew) { kCrew = crew; CrewText = Text.Get("HUD_CREW_SHORT", ship.Crew, ship.Hull.CrewMax); }
         Provisions = player.Units(Good.Provisions);
+        int fishHeld = player.Units(Good.Fish);   // eaten first, so it counts as food: shown as "provisions+fish"
         Munitions = Guns.Munitions;
         Timber = player.Units(Good.Timber);
-        long stores = Provisions * 1000000L + Munitions * 1000L + Timber;
+        long stores = Provisions * 1000000L + Munitions * 1000L + Timber + ((long)fishHeld << 40);
         if (stores != kStores)
         {
             kStores = stores;
-            ProvisionsText = Provisions.ToString(CultureInfo.InvariantCulture);
+            ProvisionsText = fishHeld > 0 ? Text.Get("HUD_FOOD_FISH", Provisions, fishHeld) : Provisions.ToString(CultureInfo.InvariantCulture);
             MunitionsText = Munitions.ToString(CultureInfo.InvariantCulture);
             TimberText = Timber.ToString(CultureInfo.InvariantCulture);
         }
-        ProvisionsLow = Provisions < Math.Max(1, (ship.Crew + 3) / 4);
+        ProvisionsLow = Provisions + fishHeld < Math.Max(1, (ship.Crew + 3) / 4);
         MunitionsLow = ship.Cannons > 0 && Munitions < ship.Cannons;
         ShipName = player.ShipName;
 
-        // The context prompt: dock, dig, salvage, each with the key that does it.
+        // The context prompt: dock, dig, salvage, hail a merchant, fish, each with the key that does it. The fishing prompt says nothing of
+        // how rich the water is: the grounds stay subtle (Nolan), the catch tells her.
         var here = world.HarborHere;
-        int branch = here != null && !world.IsDocked ? 1 : world.Digging ? 2 : world.CanDigHere || world.CanSalvageHere ? 3 : world.DigSiteHere != null ? 4 : 0;
+        var hail = here == null && !world.LinesOut ? world.HailableMerchant : null;
+        int branch = here != null && !world.IsDocked ? 1 : world.Digging ? 2 : world.CanDigHere || world.CanSalvageHere ? 3 : world.DigSiteHere != null ? 4
+            : hail != null ? 6 : world.LinesOut || world.CanFish ? 5 : 0;
+        int fishers = branch == 5 ? world.Fishers : 0;
         bool salvage = world.Salvaging;   // what the sim is actually doing (a wreck can lie inside an unmatched dig ring)
         double total = salvage ? World.SalvageSeconds : World.DigSeconds;
         bool furled = ship.SailTarget == 0 && ship.SailFraction < 0.05;
         bool open = here != null && world.IsOpen(here);
         long secs = branch == 2 ? (long)Math.Ceiling(total - world.DigProgress) : 0;
         long psig = branch + ((here?.Id ?? -1) + 1L) * 8 + (open ? 1L << 20 : 0) + (salvage ? 1L << 21 : 0) + (furled ? 1L << 22 : 0)
-            + (world.CanDigHere ? 1L << 23 : 0) + (secs << 24) + ((long)keyVersion << 40);
+            + (world.CanDigHere ? 1L << 23 : 0) + (secs << 24) + (((hail?.Id ?? -1) + 1L & 0xFFF) << 28) + ((long)keyVersion << 40) + (world.LinesOut ? 1L << 49 : 0) + ((long)Math.Min(fishers, 1000) << 50);
         PromptVisible = branch != 0;
         PromptProgress = branch == 2 ? (float)Math.Clamp(world.DigProgress / total, 0, 1) : -1;
         if (psig != kPrompt)
@@ -773,6 +795,17 @@ public partial class Hud : CanvasLayer
                     PromptText = Text.Get("HUD_DIG_NO_MAP");
                     PromptIcon = "spade";
                     PromptColour = Parchment.Muted;
+                    break;
+                case 6:
+                    // A merchant within hail (Nolan, 2026-09-28): F asks her master for the prices where she last traded.
+                    PromptText = Text.Get("HUD_HAIL", world.NameOf(hail!));
+                    PromptKey = Key("Dock");
+                    PromptIcon = "bell";
+                    break;
+                case 5:
+                    PromptText = world.LinesOut ? Text.Get("HUD_FISHING", fishers) : fishers > 0 ? Text.Get("HUD_FISH") : Text.Get("HUD_FISH_NO_HANDS", Key("Crew"));
+                    PromptKey = world.LinesOut || fishers > 0 ? Key("Dock") : "";
+                    PromptColour = world.LinesOut || fishers > 0 ? Ink.Black : Parchment.Muted;
                     break;
                 default:
                     PromptText = "";
@@ -934,7 +967,7 @@ public partial class HudCanvas : InkCanvas
     static readonly (string Action, string Action2, string Word)[] LegendDef =
     {
         ("SailUp", "SailDown", "HUD_LEGEND_SAIL"), ("Port", "Starboard", "HUD_LEGEND_HELM"), ("FirePort", "FireStarboard", "HUD_LEGEND_FIRE"),
-        ("", "", "HUD_LEGEND_SPYGLASS"), ("Order1", "Order4", "HUD_LEGEND_ORDERS"), ("Crew", "", "HUD_LEGEND_CREW"), ("Lantern", "", "HUD_LEGEND_LANTERN"),
+        ("", "", "HUD_LEGEND_SPYGLASS"), ("Crew", "", "HUD_LEGEND_CREW"), ("Lantern", "", "HUD_LEGEND_LANTERN"),
         ("Dock", "", "HUD_LEGEND_DOCK"), ("Chart", "", "HUD_LEGEND_CHART"), ("", "", "HUD_LEGEND_PAUSE"),
     };
 
@@ -952,7 +985,6 @@ public partial class HudCanvas : InkCanvas
             {
                 "HUD_LEGEND_SPYGLASS" => new[] { Text.Get("HUD_KEY_RMB") },
                 "HUD_LEGEND_PAUSE" => new[] { Text.Get("HUD_KEY_ESC") },
-                "HUD_LEGEND_ORDERS" => new[] { Hud.Key(a1) + "–" + Hud.Key(a2) },
                 _ => a2.Length > 0 ? new[] { Hud.Key(a1), Hud.Key(a2) } : new[] { Hud.Key(a1) },
             };
             legendItems.Add((keys, Text.Get(noChart && word == "HUD_LEGEND_CHART" ? "HUD_LEGEND_CHART_NONE" : word)));
@@ -1405,6 +1437,13 @@ public partial class HudCanvas : InkCanvas
         // when she is in danger, and the frame beats while she is.
         bool hullBad = Hud.HullFrac < 0.3f, waterBad = Hud.WaterFrac > 0.7f;
         Tube(hullTube, Hud.HullFrac, hullBad ? Ink.Red : HudInk.HullWood, hullBad, (float)Ship.FloodLine);   // below the line she floods
+        if (Hud.HullShown > Hud.HullFrac + 0.002f)
+        {
+            // The planks the last blow cost, pale red above what is left, until they drain away.
+            float top = hullTube.End.Y - hullTube.Size.Y * Hud.HullShown, bottom = hullTube.End.Y - hullTube.Size.Y * Hud.HullFrac;
+            Box(new Rect2(hullTube.Position.X, top, hullTube.Size.X, bottom - top), new Color(0.96f, 0.62f, 0.42f));
+        }
+        if (Hud.HullHit > 0.01f) Frame(hullTube.Grow(3.5f), 2.6f, Ink.Red with { A = Hud.HullHit });
         Tube(waterTube, Hud.WaterFrac, waterBad ? Ink.Red : HudInk.Water, waterBad, Hud.StandWaterOnly && Hud.Stand ? 0.8f : null);   // drain below it to end the stand
         TxtC(Fonts.SmallCaps, 15, hullTube.GetCenter().X, hullTube.End.Y + 17, Text.Get("HUD_GAUGE_HULL"), Ink.Black);
         TxtC(Fonts.SmallCaps, 15, waterTube.GetCenter().X, waterTube.End.Y + 17, Text.Get("HUD_GAUGE_WATER"), Ink.Black);
@@ -1432,10 +1471,10 @@ public partial class HudCanvas : InkCanvas
         Icon("shot", new Rect2(c.X - (22 + shw) / 2, gunsR.End.Y - 22, 20, 20));
         Txt(Fonts.Body, 16, new Vector2(c.X - (22 + shw) / 2 + 23, gunsR.End.Y - 6), shot, Hud.MunitionsLow ? Ink.Red : Ink.Black);
 
-        // Crew stations under the order they sail by.
+        // Crew stations, set by hand on the crew panel.
         float x = crewR.Position.X, y = crewR.Position.Y + 12;
         Box(new Rect2(x - 10, crewR.Position.Y + 2, 1, crewR.Size.Y - 4), Ink.Faint);
-        Txt(Fonts.Italic, 16, new Vector2(x, y), Hud.OrderName, Ink.Black);
+        Txt(Fonts.Italic, 16, new Vector2(x, y), Text.Get("HUD_CREW_STATIONS"), Ink.Black);
         for (int i = 0; i < 4; i++)
         {
             float ry = y + 6 + i * 20;
@@ -1443,9 +1482,7 @@ public partial class HudCanvas : InkCanvas
             Txt(Fonts.Body, 16, new Vector2(x + 24, ry + 15), Hud.StationText[i], Ink.Black);
             Txt(Fonts.Body, 15, new Vector2(x + 40, ry + 15), Text.Get("HUD_STATION_" + i), Parchment.Muted);
         }
-        float kx = x;
-        kx += KeyCap(new Vector2(kx, crewR.End.Y - 22), Hud.Key("Order1") + "–" + Hud.Key("Order4"), 21) + 4;
-        KeyCap(new Vector2(kx, crewR.End.Y - 22), Hud.Key("Crew"), 21);
+        KeyCap(new Vector2(x, crewR.End.Y - 22), Hud.Key("Crew"), 21);
     }
 
     static readonly string[] Plus = Enumerable.Range(0, 100).Select(i => i.ToString(CultureInfo.InvariantCulture)).ToArray();
@@ -1693,7 +1730,7 @@ public partial class HudCanvas : InkCanvas
         {
             // Patching is the other way out: carpenters first, the hull back over the flood line, and she drains.
             float kx = x;
-            kx += KeyCap(new Vector2(kx, r.Position.Y + 114), Hud.Key("Order3")) + 8;
+            kx += KeyCap(new Vector2(kx, r.Position.Y + 114), Hud.Key("Crew")) + 8;
             Txt(Fonts.Body, 16, new Vector2(kx, r.Position.Y + 130), Text.Get("HUD_STAND_PATCH"), Ink.Black);
         }
     }
@@ -1757,7 +1794,7 @@ public partial class EdgeMarkers : InkCanvas
     {
         public readonly Vector2 At;
         public readonly string Label;
-        public readonly int Kind;       // 0 ship, 1 beast, 2 harbour
+        public readonly int Kind;       // 0 ship, 1 beast, 2 harbour (last stand), 3 delivery, 4 flotsam
         public readonly int Count;
         public readonly int ShipId;     // -1 for a beast or a harbour
         public readonly bool Reported;  // beyond sight: the lookout's warning
@@ -1771,11 +1808,11 @@ public partial class EdgeMarkers : InkCanvas
     {
         public Vector2 Screen, At;
         public double Distance;
-        public int Kind;          // 0 ship, 1 beast, 2 harbour
+        public int Kind;          // 0 ship, 1 beast, 2 harbour (last stand), 3 delivery, 4 flotsam
         public bool Reported;     // beyond sight: the lookout's warning
         public float Angle;       // ship heading (glyph)
-        public Color Faction;
-        public string Name, Icon;
+        public Color Faction;     // the hull's colours (a ship), else the badge's own ink
+        public string Name, Icon, Due;
         public bool Merged;
         public int Count, ShipId;
     }
@@ -1786,6 +1823,9 @@ public partial class EdgeMarkers : InkCanvas
     readonly List<Rect2> badgeRects = new();
     readonly Dictionary<(string, int, long, bool), string> labelCache = new();
     readonly List<Marker> placed = new();
+    readonly List<(int Port, double Due, ContractKind Kind)> deliveries = new();
+    /// <summary>A delivery's badge and label: the ochre of the office's seal; red once less than a day is left.</summary>
+    static readonly Color DeliveryInk = new(0.50f, 0.33f, 0.08f);
     public int Count => placed.Count;
     public IReadOnlyList<Marker> Placed => placed;
     const float Radius = 17;
@@ -1816,7 +1856,7 @@ public partial class EdgeMarkers : InkCanvas
             targets.Add(new Target
             {
                 Screen = s, Distance = d, Kind = 0, Reported = reported, Angle = (float)other.Heading,
-                Faction = Ink.Faction(other.Faction), Name = Text.Get("HULL_" + other.Hull.Id), Icon = "", Count = 1, ShipId = other.Id,
+                Faction = Ink.Faction(other.Faction), Name = Text.Get("HULL_" + other.Hull.Id), Icon = "", Due = "", Count = 1, ShipId = other.Id,
             });
         }
         if (world.Monster is { Done: false } m)
@@ -1830,7 +1870,7 @@ public partial class EdgeMarkers : InkCanvas
                 targets.Add(new Target
                 {
                     Screen = s, Distance = d, Kind = 1, Reported = reported, Name = Text.Get("MONSTER_" + m.Def.Key),
-                    Icon = "m_" + m.Def.Key, Faction = Ink.Red, Count = 1, ShipId = -1,
+                    Icon = "m_" + m.Def.Key, Due = "", Faction = Ink.Red, Count = 1, ShipId = -1,
                 });
         }
         if (Hud.RescueHarbour is { } port)
@@ -1840,8 +1880,42 @@ public partial class EdgeMarkers : InkCanvas
                 targets.Add(new Target
                 {
                     Screen = s, Distance = Math.Max(0, port.Harbor.DistanceTo(world.Ship.Pos) - port.RingRadius), Kind = 2,
-                    Name = port.Name, Icon = "anchor", Faction = HudInk.Safe, Count = 1, ShipId = -1,
+                    Name = port.Name, Icon = "anchor", Due = "", Faction = HudInk.Safe, Count = 1, ShipId = -1,
                 });
+        }
+        // The way to her deliveries (Nolan, 2026-09-28): one badge per port she owes, soonest due, on the rim toward it or
+        // over the harbour once it is in view; none while she lies in its ring (the dock prompt has it then).
+        deliveries.Clear();
+        foreach (var c in world.Player.Contracts)
+        {
+            int i = deliveries.FindIndex(d => d.Port == c.To);
+            if (i < 0) deliveries.Add((c.To, c.Deadline, c.Kind));
+            else if (c.Deadline < deliveries[i].Due) deliveries[i] = (c.To, c.Deadline, c.Kind);
+        }
+        var inRing = world.HarborHere;
+        foreach (var (to, due, kind) in deliveries)
+        {
+            var dest = world.Map.Ports[to];
+            if (dest == inRing) continue;
+            bool pressed = due - world.DaysSurvived < 1;
+            targets.Add(new Target
+            {
+                Screen = xf * Ink.V(dest.Harbor), Distance = Math.Max(0, dest.Harbor.DistanceTo(world.Ship.Pos) - dest.RingRadius), Kind = 3,
+                Name = dest.Name, Due = Text.Get("HUD_DAY_N", 1 + (int)Math.Floor(due)), Icon = kind == ContractKind.Dispatch ? "o_seal" : "crate",
+                Faction = pressed ? Ink.Red : DeliveryInk, Count = 1, ShipId = -1,
+            });
+        }
+        // Flotsam in her sight but off the screen (a barrel adrift ahead, a sinking's spill astern).
+        foreach (var f in world.Flotsam)
+        {
+            if (!world.PlayerSees(f.Pos, 4)) continue;
+            var s = xf * Ink.V(f.Pos);
+            if (track.HasPoint(s) && !UnderPlate(s)) continue;   // in view: the barrel itself shows
+            targets.Add(new Target
+            {
+                Screen = s, Distance = f.Pos.DistanceTo(world.Ship.Pos), Kind = 4, Name = Text.Get("HUD_FLOTSAM"),
+                Icon = f.Gold > 0 ? "coin" : "crate", Due = "", Faction = HudInk.HullWood, Count = 1, ShipId = -1,
+            });
         }
         if (targets.Count == 0) return;
 
@@ -1862,8 +1936,9 @@ public partial class EdgeMarkers : InkCanvas
             targets[i] = t;
         }
         // Crowded badges merge into the nearest one of them.
-        // The refuge harbour first (its label matters most in a last stand), then nearest first.
-        targets.Sort((a, b) => a.Kind == 2 != (b.Kind == 2) ? (a.Kind == 2 ? -1 : 1) : a.Distance.CompareTo(b.Distance));
+        // The refuge harbour first (its label matters most in a last stand), then the deliveries, then nearest first.
+        static int Rank(int kind) => kind == 2 ? 0 : kind == 3 ? 1 : 2;
+        targets.Sort((a, b) => Rank(a.Kind) != Rank(b.Kind) ? Rank(a.Kind).CompareTo(Rank(b.Kind)) : a.Distance.CompareTo(b.Distance));
         for (int i = 0; i < targets.Count; i++)
         {
             if (targets[i].Merged) continue;
@@ -1871,7 +1946,9 @@ public partial class EdgeMarkers : InkCanvas
             for (int j = i + 1; j < targets.Count; j++)
             {
                 var b = targets[j];
-                if (b.Merged || b.Kind == 2 || a.Kind == 2 || a.At.DistanceTo(b.At) > Radius * 2.2f) continue;
+                // Ships and beasts merge with each other, flotsam with flotsam; harbours and deliveries stand alone.
+                bool alike = a.Kind <= 1 && b.Kind <= 1 || a.Kind == 4 && b.Kind == 4;
+                if (b.Merged || !alike || a.At.DistanceTo(b.At) > Radius * 2.2f) continue;
                 b.Merged = true;
                 targets[j] = b;
                 a.Count++;
@@ -1889,7 +1966,7 @@ public partial class EdgeMarkers : InkCanvas
         foreach (var t in targets)
         {
             if (t.Merged) continue;
-            var ring = t.Kind == 2 ? HudInk.Safe : Ink.Red;
+            var ring = t.Kind <= 1 ? Ink.Red : t.Faction;
             float alpha = t.Reported ? 0.72f : 1f;
             var bearing = (t.Screen - origin).Normalized();
             if (bearing == Vector2.Zero) bearing = Vector2.Right;
@@ -1913,11 +1990,14 @@ public partial class EdgeMarkers : InkCanvas
 
             // The label goes on the side facing the middle of the screen, if it fits clear of the plates.
             // Distances in tens of metres: steady enough to read, and the labels are cached rather than rebuilt each frame.
-            long d10 = (long)Math.Round(t.Distance / 10) * 10;
-            var lk = (t.Name, t.Count, d10, t.Reported);
+            // A delivery far off reads in kilometres to the tenth ("2.1 km").
+            bool km = t.Kind == 3 && t.Distance >= 1000;
+            long d10 = km ? (long)Math.Round(t.Distance / 100) * 100 : (long)Math.Round(t.Distance / 10) * 10;
+            var lk = (t.Name + t.Due, t.Count, d10, t.Reported);
             if (!labelCache.TryGetValue(lk, out var label))
             {
-                label = t.Count > 1 ? Text.Get("HUD_MARK_MORE", t.Name, t.Count - 1, d10) : Text.Get("HUD_MARK", t.Name, d10);
+                label = t.Kind == 3 ? Text.Get("HUD_MARK_DELIVERY", t.Name, km ? Text.Get("HUD_DIST_KM", (d10 / 1000.0).ToString("0.0", CultureInfo.InvariantCulture)) : Text.Get("HUD_DIST_M", d10), t.Due)
+                    : t.Count > 1 ? Text.Get("HUD_MARK_MORE", t.Name, t.Count - 1, d10) : Text.Get("HUD_MARK", t.Name, d10);
                 if (t.Reported) label = Text.Get("HUD_MARK_REPORTED", label);
                 if (labelCache.Count > 256) labelCache.Clear();
                 labelCache[lk] = label;
@@ -1943,10 +2023,31 @@ public partial class EdgeMarkers : InkCanvas
                 if (clear) foreach (var o in labels) if (o.Intersects(lr)) { clear = false; break; }
                 if (clear) foreach (var o in badgeRects) if (o.Intersects(lr)) { clear = false; break; }
             }
+            // A harbour's or a delivery's label is the point of its badge: failing the four sides, slide it along the
+            // preferred one, and in the end letter it there anyway rather than drop it.
+            if (!clear && t.Kind is 2 or 3)
+            {
+                var first = order[0];
+                for (int k = 1; k <= 8 && !clear; k++)
+                {
+                    float shift = (k + 1) / 2 * 22f * (k % 2 == 1 ? 1 : -1);
+                    lr = horizontal ? new Rect2(first.Position.X, first.Position.Y + shift, lw, 18) : new Rect2(first.Position.X + shift * 3, first.Position.Y, lw, 18);
+                    lr.Position = new Vector2(Math.Clamp(lr.Position.X, 4, size.X - lw - 4), Math.Clamp(lr.Position.Y, 4, size.Y - 22));
+                    clear = true;
+                    foreach (var k2 in keep) if (k2.Intersects(lr)) { clear = false; break; }
+                    if (clear) foreach (var o in labels) if (o.Intersects(lr)) { clear = false; break; }
+                }
+                if (!clear)
+                {
+                    lr = first;
+                    lr.Position = new Vector2(Math.Clamp(lr.Position.X, 4, size.X - lw - 4), Math.Clamp(lr.Position.Y, 4, size.Y - 22));
+                    clear = true;
+                }
+            }
             if (clear)
             {
                 labels.Add(lr);
-                Txt(Fonts.Body, 15, new Vector2(lr.Position.X, lr.Position.Y + 14), label, (t.Kind == 2 ? HudInk.Safe : Ink.Red) with { A = alpha }, 5, Ink.Paper with { A = 0.9f * alpha });
+                Txt(Fonts.Body, 15, new Vector2(lr.Position.X, lr.Position.Y + 14), label, ring with { A = alpha }, 5, Ink.Paper with { A = 0.9f * alpha });
             }
             placed.Add(new Marker(t.At, clear ? label : "", t.Kind, t.Count, t.ShipId, t.Reported));
         }

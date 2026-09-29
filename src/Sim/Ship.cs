@@ -9,12 +9,11 @@ public enum Side { Port = 0, Starboard = 1 }
 /// <param name="SailDelta">Steps to raise (+) or lower (−) the sail this tick.</param>
 /// <param name="FirePort">Fire the port broadside this tick.</param>
 /// <param name="FireStarboard">Fire the starboard broadside this tick.</param>
-/// <param name="Order">1–4 sets a crew order (Battle, Make sail, Repair, Balanced); 0 keeps it.</param>
 /// <param name="ToggleLantern">Douse or light the lantern (M6).</param>
 /// <param name="Action">The context action (dig, salvage) (M9).</param>
 /// <param name="Spyglass">The spyglass is raised (it inks the chart and spots ports, so it is logged like the helm).</param>
 /// <param name="SpyglassDir">Where the raised glass points, radians.</param>
-public readonly record struct ShipInput(double Rudder, int SailDelta, bool FirePort = false, bool FireStarboard = false, int Order = 0, bool ToggleLantern = false, bool Action = false,
+public readonly record struct ShipInput(double Rudder, int SailDelta, bool FirePort = false, bool FireStarboard = false, bool ToggleLantern = false, bool Action = false,
     bool Spyglass = false, double SpyglassDir = 0);
 
 /// <summary>
@@ -59,6 +58,10 @@ public sealed class Ship
     public bool IsPlayer;
     public Faction Faction = Faction.FreeTraders;
     public int Crew;
+    /// <summary>
+    /// How the hands are split. AI captains sail by the orders; the player's crew keeps the balanced split until the
+    /// crew panel sets it by hand (<see cref="CrewOrder.Custom"/>: Nolan, 2026-09-28, no order keys).
+    /// </summary>
     public CrewOrder Order = CrewOrder.Balanced;
     public int CannonGrade;                         // 0 = 4-pdr … 5 = 24-pdr
     public readonly bool[] Loaded = { true, true };
@@ -166,14 +169,20 @@ public sealed class Ship
         return new[] { guns, sails, repair, spare };
     }
 
+    /// <summary>Carpenters the repair station wants: one per 100 hull.</summary>
+    public int RepairHands => Math.Max(1, (int)(MaxHp / 100));
+
     /// <summary><see cref="Stations"/> without an array (it runs several times a ship a tick: audit R-04).</summary>
-    public void Split(out int guns, out int sails, out int repair, out int spare)
+    public void Split(out int guns, out int sails, out int repair, out int spare) => SplitFor(Order, out guns, out sails, out repair, out spare);
+
+    /// <summary>Hands per station under <paramref name="order"/> (for <see cref="CrewOrder.Custom"/>, the hand-set places).</summary>
+    public void SplitFor(CrewOrder order, out int guns, out int sails, out int repair, out int spare)
     {
         int left = Crew;
-        int needGuns = Cannons, needSails = Hull.Riggers, needRepair = Math.Max(1, (int)(MaxHp / 100));
+        int needGuns = Cannons, needSails = Hull.Riggers, needRepair = RepairHands;
         guns = sails = repair = 0;
         static void Take(ref int station, ref int left, int need) { int n = Math.Min(left, need); station += n; left -= n; }
-        if (Order == CrewOrder.Custom)
+        if (order == CrewOrder.Custom)
         {
             Take(ref guns, ref left, Math.Min(needGuns, CustomStations[0]));
             Take(ref sails, ref left, Math.Min(needSails, CustomStations[1]));
@@ -181,7 +190,7 @@ public sealed class Ship
             spare = left;
             return;
         }
-        switch (Order)
+        switch (order)
         {
             case CrewOrder.Battle: Take(ref guns, ref left, needGuns); Take(ref sails, ref left, needSails); Take(ref repair, ref left, needRepair); break;
             case CrewOrder.MakeSail: Take(ref sails, ref left, needSails); Take(ref guns, ref left, needGuns); Take(ref repair, ref left, needRepair); break;

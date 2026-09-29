@@ -23,6 +23,17 @@ public sealed class AiState
     public bool Fleeing;
     public double FleeTime;
     public double Scale = 1;     // Threat scaling applied at spawn (for the recap/debug)
+    /// <summary>A merchant's news: the prices at the last ports she traded in, newest last (<see cref="World.MerchantNewsKept"/>).</summary>
+    public List<PortNews> News = new();
+}
+
+/// <summary>What a merchant saw at a port she traded in: the prices there that day (what it makes and what it wants).</summary>
+public sealed class PortNews
+{
+    public int Port { get; set; }
+    public double Day { get; set; }
+    public List<Good> Goods { get; set; } = new();
+    public List<double> Prices { get; set; } = new();
 }
 
 /// <summary>Shared seamanship: getting to a point through the wind and around the land, and fighting.</summary>
@@ -255,13 +266,13 @@ public static class Seamanship
         return input with { FirePort = side == Side.Port && ship.CanFire(Side.Port), FireStarboard = side == Side.Starboard && ship.CanFire(Side.Starboard) };
     }
 
-    /// <summary><see cref="Bears"/>, and no island in the way (shot stops at land: P-01). The land test runs only when a
-    /// loaded side bears, so it costs nothing between broadsides.</summary>
+    /// <summary><see cref="Bears"/>, and no island or drift ice in the way (shot stops at both: P-01). The tests run only
+    /// when a loaded side bears, so they cost nothing between broadsides.</summary>
     public static Side? ClearShot(World world, Ship ship, Ship target)
     {
         var side = Bears(ship, target);
         if (side is not { } s || !ship.CanFire(s)) return side;
-        return world.LandAlong(ship.Pos, target.Pos) == null ? side : null;
+        return world.LandAlong(ship.Pos, target.Pos) == null && world.IceAlong(ship.Pos, target.Pos) == null ? side : null;
     }
 
     /// <summary>

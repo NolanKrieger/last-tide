@@ -4,8 +4,9 @@ using LastTide.Sim;
 namespace LastTide;
 
 /// <summary>
-/// The crew panel (C): the four orders, and each station with its hands drawn as little sailors — filled for a hand at
-/// the station, faded for a place still wanting one — and −/+ to move hands by hand (GDD §7).
+/// The crew panel (C): each station with its hands drawn as little sailors — filled for a hand at the station, faded for
+/// a place still wanting one — and −/+ to move hands by hand (GDD §7). There are no order presets: the crew is set here
+/// (Nolan, 2026-09-28).
 /// </summary>
 public partial class CrewPanel : CanvasLayer
 {
@@ -17,13 +18,12 @@ public partial class CrewPanel : CanvasLayer
     readonly Label[] names = new Label[4], counts = new Label[4];
     readonly UiFigures[] figures = new UiFigures[4];
     readonly Button[] plus = new Button[3], minus = new Button[3];
-    readonly Button[] orders = new Button[4];
     static readonly string[] Keys = { "STATION_GUNS", "STATION_SAILS", "STATION_REPAIR", "STATION_SPARE" };
     static readonly string[] Icons = { "ui/station-guns", "ui/station-sails", "ui/station-repair", "people/sailor" };
     public bool IsOpen => Visible;
     public UiFigures Figures(int station) => figures[station];
     public Button Plus(int station) => plus[station];
-    public Button OrderButton(int order) => orders[order];
+    public Button Minus(int station) => minus[station];
     /// <summary>The officers aboard as listed, and whether the no-cartographer warning shows (the self-test reads both).</summary>
     public string OfficersText => officersLine.Text;
     public bool NoCartographerShown => noCartographer.Visible;
@@ -55,18 +55,6 @@ public partial class CrewPanel : CanvasLayer
         closeHint = Parchment.L(Text.Get("CREW_CLOSE"), "Caption");
         head.AddChild(closeHint);
 
-        var ordersRow = Parchment.Row(6);
-        col.AddChild(ordersRow);
-        var group = new ButtonGroup();
-        for (int i = 0; i < 4; i++)
-        {
-            int idx = i;
-            orders[i] = Parchment.B(Text.Get("ORDER_" + ((CrewOrder)i).ToString().ToUpperInvariant()), () => { world.Apply(new PortCommand(PortAction.CrewOrder, Amount: idx)); Refresh(); });   // logged: replays see it
-            orders[i].ToggleMode = true;
-            orders[i].ButtonGroup = group;
-            orders[i].SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-            ordersRow.AddChild(orders[i]);
-        }
         col.AddChild(new UiDivider(true, 20));
 
         for (int i = 0; i < 4; i++)
@@ -111,16 +99,6 @@ public partial class CrewPanel : CanvasLayer
         col.AddChild(note);
     }
 
-    /// <summary>An order key (1–4 by default) while the panel is up: the same as clicking that order.</summary>
-    public void PressOrder(int order)
-    {
-        if (order < 0 || order > 3) return;
-        Audio.Ui();
-        world.Apply(new PortCommand(PortAction.CrewOrder, Amount: order));   // logged: replays see it
-        Refresh();
-        orders[order].GrabFocus();
-    }
-
     void Adjust(int station, int delta)
     {
         var st = world.Ship.Stations();
@@ -138,7 +116,9 @@ public partial class CrewPanel : CanvasLayer
         if (Visible)
         {
             Refresh();
-            orders[(int)Math.Min((int)world.Ship.Order, 3)].CallDeferred(Control.MethodName.GrabFocus);
+            // Focus the first button that does something, so the keyboard can work the panel too.
+            var first = plus.Concat(minus).FirstOrDefault(b => !b.Disabled) ?? plus[0];
+            first.CallDeferred(Control.MethodName.GrabFocus);
         }
     }
 
@@ -150,18 +130,13 @@ public partial class CrewPanel : CanvasLayer
         var st = ship.Stations();
         title.Text = Text.Get("CREW_HEAD", ship.Crew, ship.Hull.CrewMax);
         orderLine.Text = Text.Get("CREW_WAGES", world.DailyWages(), world.DailyProvisions);
-        var need = new[] { ship.Cannons, ship.Hull.Riggers, Math.Max(1, (int)(ship.MaxHp / 100)), 0 };
+        var need = new[] { ship.Cannons, ship.Hull.Riggers, ship.RepairHands, 0 };
         for (int i = 0; i < 4; i++)
         {
             counts[i].Text = i < 3 ? Text.Get("STATION_COUNT", st[i], need[i]) : Text.Get("STATION_REST", st[i]);
             counts[i].AddThemeColorOverride("font_color", i < 3 && st[i] < need[i] ? Ink.Red : Parchment.Muted);
             figures[i].Count = st[i];
             figures[i].Wanted = i < 3 ? Math.Max(0, need[i] - st[i]) : 0;
-        }
-        for (int i = 0; i < 4; i++)
-        {
-            orders[i].SetPressedNoSignal(ship.Order == (CrewOrder)i);
-            orders[i].Text = Text.Get("ORDER_" + ((CrewOrder)i).ToString().ToUpperInvariant());   // key names follow the bindings
         }
         closeHint.Text = Text.Get("CREW_CLOSE");
         note.Text = Text.Get("CREW_NOTE");

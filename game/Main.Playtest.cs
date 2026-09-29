@@ -239,7 +239,6 @@ public partial class Main
         for (int i = 0; i < -ai.SailDelta; i++) PtTap("SailDown");
         if (ai.FirePort) PtTap("FirePort");
         if (ai.FireStarboard) PtTap("FireStarboard");
-        if (ai.Order is >= 1 and <= 4) PtTap("Order" + ai.Order);
         if (ai.ToggleLantern) PtTap("Lantern");
         if (ai.Action) PtTap("Dock");
     }

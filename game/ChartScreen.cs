@@ -5,8 +5,8 @@ namespace LastTide;
 
 /// <summary>
 /// The chart (M): the whole archipelago as the player has inked it so far, drawn as an antique sea chart — a cartouche,
-/// a degree-ticked neatline, compass roses with their rhumb lines, region names lettered in the sea, monsters in the
-/// blank margins, a key to the glyphs — with the ship, ports, ink pins with notes, cove rumours, treasure marks, the
+/// a degree-ticked neatline, compass roses with their rhumb lines, region names lettered in the sea, monsters round the
+/// frame, a key to the glyphs — with the ship, ports, ink pins with notes, treasure marks, the
 /// bottle-map sketches, and the player's own ledger when hovering a port (GDD §5). The sim pauses while it is open.
 /// </summary>
 public partial class ChartScreen : CanvasLayer
@@ -381,8 +381,8 @@ public partial class ChartCanvas : Control
 }
 
 /// <summary>
-/// The map inside the neatline (clipped to it): rhumb lines and compass roses printed on the paper, monsters in the
-/// blank margins, the charted wash, islands with hachured coasts and dotted shallows, region names, ports, marks,
+/// The map inside the neatline (clipped to it): rhumb lines and compass roses printed on the paper, monsters round the
+/// border, the charted wash, islands with hachured coasts and dotted shallows, region names, ports, marks,
 /// pins and the ship. Glyphs and lettering stay the same size at every zoom; the geography scales.
 /// </summary>
 public partial class ChartMap : Control
@@ -393,7 +393,7 @@ public partial class ChartMap : Control
     int[] triIndices = Array.Empty<int>();
     Vector2[] triPoints = Array.Empty<Vector2>();
     Color[] triColors = Array.Empty<Color>();
-    readonly List<(Vec2 Pos, string Tex)> monsters = new();
+    readonly string[] monsterTex = new string[6];
     readonly List<(Vec2 Pos, string Name)> regionNames = new();
     Vec2[] roses = { new(-Map.HalfW * 0.52, Map.HalfH * 0.42), new(Map.HalfW * 0.58, -Map.HalfH * 0.46) };
     int rosesFor = int.MinValue;
@@ -446,6 +446,7 @@ public partial class ChartMap : Control
     /// <summary>The printed roses sit in the openest water of each half of the chart (fixed for the voyage).</summary>
     void PlaceRoses()
     {
+        const double open = 900 * Map.Stretch;
         for (int half = 0; half < 2; half++)
         {
             Vec2 best = roses[half];
@@ -455,15 +456,15 @@ public partial class ChartMap : Control
                 {
                     var p = new Vec2(-Map.HalfW + (half * 10 + gx + 0.5) * Map.Width / 20, -Map.HalfH + (gy + 0.5) * Map.Height / 12);
                     double edge = Math.Min(Math.Min(p.X + Map.HalfW, Map.HalfW - p.X), Math.Min(p.Y + Map.HalfH, Map.HalfH - p.Y));
-                    double d = Math.Min(edge, 900);
-                    foreach (var isl in World.Map.IslandsNear(p, 900)) d = Math.Min(d, p.DistanceTo(isl.Centre) - isl.BoundRadius);
+                    double d = Math.Min(edge, open);
+                    foreach (var isl in World.Map.IslandsNear(p, open)) d = Math.Min(d, p.DistanceTo(isl.Centre) - isl.BoundRadius);
                     if (d > bestD) { bestD = d; best = p; }
                 }
             roses[half] = best;
-            roseSize[half] = Math.Clamp(bestD * 2.2, 380, half == 0 ? 1000 : 700);
+            roseSize[half] = Math.Clamp(bestD * 2.2, 380 * Map.Stretch, (half == 0 ? 1000 : 700) * Map.Stretch);
         }
     }
-    readonly double[] roseSize = { 1000, 640 };
+    readonly double[] roseSize = { 1000 * Map.Stretch, 640 * Map.Stretch };
 
     static Color LandTint(RegionType r) => r switch
     {
@@ -481,39 +482,26 @@ public partial class ChartMap : Control
         _ => Ink.Land,
     };
 
+    /// <summary>Which beast swims in each of the six places round the frame (fixed by the voyage's seed).</summary>
     void PlaceMonsters()
     {
-        monsters.Clear();
-        float mon = MonsterSize();
         string[] tex = { "monster-whale", "monster-serpent", "monster-hippocamp", "monster-fish" };
         var rng = new Rng((ulong)(World.Seed * 7919 + 3));
         var order = tex.OrderBy(_ => rng.NextDouble()).ToArray();
-        var candidates = new List<(Vec2 P, double Score)>();
-        for (int gx = 0; gx < 16; gx++)
-            for (int gy = 0; gy < 12; gy++)
-            {
-                var p = new Vec2(-Map.HalfW + (gx + 0.5) * Map.Width / 16, -Map.HalfH + (gy + 0.5) * Map.Height / 12);
-                bool blank = true;
-                for (int k = 0; k < 9 && blank; k++)
-                {
-                    var q = k == 0 ? p : p + Vec2.FromAngle(k * Angles.Tau / 8) * 480;
-                    if (Map.InBounds(q) && World.Reveal.IsRevealed(q)) blank = false;
-                }
-                if (!blank || p.DistanceTo(World.Ship.Pos) < 1100) continue;
-                if (roses.Any(r => r.DistanceTo(p) < 800) || World.Pins.Any(q => q.Pos.DistanceTo(p) < 600)) continue;
-                if (World.Player.CoveHints.Any(h => new Vec2(h.X, h.Y).DistanceTo(p) < h.Radius + 500)) continue;
-                // Wholly inside the opening view or wholly outside it: never a fin cut off at the neatline.
-                var box = new Rect2(Canvas.ToScreen(p) - new Vector2(mon, mon * 0.8f) / 2, new Vector2(mon, mon * 0.8f));
-                if (box.Intersects(Canvas.View) && !Canvas.View.Encloses(box)) continue;
-                double edge = Math.Min(Math.Min(p.X + Map.HalfW, Map.HalfW - p.X), Math.Min(p.Y + Map.HalfH, Map.HalfH - p.Y));
-                candidates.Add((p, -edge + rng.NextDouble() * 300));
-            }
-        foreach (var c in candidates.OrderBy(c => c.Score))
-        {
-            if (monsters.Count >= 3) break;
-            if (monsters.Any(m => m.Pos.DistanceTo(c.P) < 1700)) continue;
-            monsters.Add((c.P, order[monsters.Count]));
-        }
+        // Four drawings round six places: the two repeats never sit side by side.
+        for (int i = 0; i < monsterTex.Length; i++) monsterTex[i] = order[i % order.Length];
+    }
+
+    /// <summary>
+    /// Here be monsters (Nolan, 2026-09-28: six, "evenly spread out around the edge of the map"): drawn on the frame,
+    /// not the sea, so all six show at every zoom and pan. Six places at equal steps round a ring just inside the
+    /// neatline (two along the top, one at each side, two along the bottom), as offsets from the frame's centre in pixels.
+    /// </summary>
+    Vector2[] MonsterSlots(float size)
+    {
+        float inset = size * 0.62f;   // the whole drawing inside the neatline, with a little paper round it
+        float hx = Canvas.View.Size.X / 2 - inset, hy = Canvas.View.Size.Y / 2 - inset, a = (hx + hy) / 3;   // a third of the ring's half-perimeter
+        return new Vector2[] { new(-a, -hy), new(a, -hy), new(hx, 0), new(a, hy), new(-a, hy), new(-hx, 0) };
     }
 
     void PlaceRegionNames()
@@ -557,7 +545,8 @@ public partial class ChartMap : Control
         }
     }
 
-    float MonsterSize() => Mathf.Clamp(Canvas.View.Size.Y * 0.2f, 110, 250) * Mathf.Sqrt(Canvas.Zoom);
+    /// <summary>A monster drawing's width in pixels: some a ninth of the frame's height.</summary>
+    float MonsterSize() => Mathf.Clamp(Canvas.View.Size.Y * 0.11f, 64, 140);
 
     static int RegionSize(float zoom) => (int)(22 * Mathf.Pow(zoom, 0.35f));
 
@@ -596,15 +585,18 @@ public partial class ChartMap : Control
                 DrawTextureRect(rose, new Rect2(o - new Vector2(size, size * rose.GetHeight() / rose.GetWidth()) / 2, new Vector2(size, size * rose.GetHeight() / rose.GetWidth())), false, new Color(1, 1, 1, 0.5f));
             }
 
-        // Here be monsters, in the blank margins.
+        // Here be monsters, round the frame (under the land and lettering). The drawings face right: those on the
+        // right-hand side turn to face in.
         float mon = MonsterSize();
-        foreach (var (pos, tex) in monsters)
-            if (Parchment.Tex(tex) is { } t)
+        var slots = MonsterSlots(mon);
+        for (int i = 0; i < slots.Length; i++)
+            if (Parchment.Tex(monsterTex[i]) is { } t)
             {
-                var o = c.ToScreen(pos);
                 var sz = new Vector2(mon, mon * t.GetHeight() / t.GetWidth());
-                DrawTextureRect(t, new Rect2(o - sz / 2, sz), false, new Color(1, 1, 1, 0.85f));
+                DrawSetTransform(c.View.Size / 2 + slots[i], 0, new Vector2(slots[i].X > 0 ? -1 : 1, 1));
+                DrawTextureRect(t, new Rect2(-sz / 2, sz), false, new Color(1, 1, 1, 0.85f));
             }
+        DrawSetTransform(-c.View.Position);
 
         // Islands: every charted island's land in one triangle draw (in metres), then coasts, hachures and shallows.
         if (triIndices.Length > 0)
@@ -668,7 +660,7 @@ public partial class ChartMap : Control
             DrawString(regionFont, at + new Vector2(-sz.X / 2, sz.Y * 0.3f), name, HorizontalAlignment.Left, -1, rsize, new Color(0.3f, 0.24f, 0.18f, 0.55f));
         }
 
-        // Treasure and wreck marks, cove rumours.
+        // Treasure and wreck marks.
         var red = new List<Vector2>();
         foreach (var t in World.Map.Treasures.Where(t => t.Dug))
         {
@@ -684,18 +676,6 @@ public partial class ChartMap : Control
             xs.Add(p + new Vector2(-7, -7)); xs.Add(p + new Vector2(7, 7)); xs.Add(p + new Vector2(-7, 7)); xs.Add(p + new Vector2(7, -7));
         }
         if (xs.Count > 0) DrawMultiline(xs.ToArray(), Ink.Red, 3f);
-        var dashes = new List<Vector2>();
-        foreach (var hint in World.Player.CoveHints)
-        {
-            var o = c.ToScreen(new Vec2(hint.X, hint.Y));
-            float r = (float)hint.Radius * s;
-            for (int k = 0; k < 36; k += 2)
-            {
-                dashes.Add(o + Vec(k * Mathf.Tau / 36) * r);
-                dashes.Add(o + Vec((k + 1) * Mathf.Tau / 36) * r);
-            }
-        }
-        if (dashes.Count > 0) DrawMultiline(dashes.ToArray(), Ink.Red, 1.6f);
         var wrecks = new List<Vector2>();
         foreach (var w in World.Map.Wrecks)
         {
@@ -775,9 +755,7 @@ public partial class ChartMap : Control
             DrawString(it, best, due, HorizontalAlignment.Left, -1, 15, Ink.Red);
         }
 
-        // Rumour marks and pin notes (italic).
-        foreach (var hint in World.Player.CoveHints)
-            DrawString(Fonts.DisplayItalic, c.ToScreen(new Vec2(hint.X, hint.Y)) + new Vector2(-8, 12), "?", HorizontalAlignment.Left, -1, 34, Ink.Red);
+        // Pin notes (italic).
         var pinLines = new List<Vector2>();
         foreach (var pin in World.Pins)
         {
@@ -897,7 +875,7 @@ public partial class ChartOverlay : Control
             (hp.Secret ? Text.Get("CHART_COVE_LINE") : Text.Get("CHART_PORT", Text.Get("FACTION_" + hp.Faction.ToString().ToLowerInvariant()), Text.Get("REGION_" + RegionDef.Of(hp.Region).Key)), Fonts.Italic, 17, Parchment.Muted),
         };
         double lastDay = -1;
-        bool rumour = false;
+        string teller = "";
         string Prices(IEnumerable<Good> goods)
         {
             var parts = new List<string>();
@@ -905,14 +883,14 @@ public partial class ChartOverlay : Control
                 if (w.Player.Remembered(hp.Id, g) is { } e)
                 {
                     parts.Add(Text.Get("CHART_PRICE", Text.Get("GOOD_" + Goods.Of(g).Key), Math.Round(e.Price)));
-                    if (e.Day > lastDay) { lastDay = e.Day; rumour = e.Rumor; }
+                    if (e.Day > lastDay) { lastDay = e.Day; teller = e.Teller; }
                 }
             return string.Join(" · ", parts.Take(4));
         }
         string sells = Prices(hp.Produces), buys = Prices(hp.Consumes);
         if (sells.Length > 0) lines.Add((Text.Get("CHART_SELLS", sells), Fonts.Body, 17, Ink.Black));
         if (buys.Length > 0) lines.Add((Text.Get("CHART_BUYS", buys), Fonts.Body, 17, Ink.Black));
-        if (lastDay >= 0) lines.Add((Text.Get(rumour ? "CHART_HEARD" : "CHART_SEEN", Math.Floor(lastDay) + 1), Fonts.Italic, 16, Parchment.Muted));
+        if (lastDay >= 0) lines.Add((teller.Length > 0 ? Text.Get("CHART_HEARD", Math.Floor(lastDay) + 1, teller) : Text.Get("CHART_SEEN", Math.Floor(lastDay) + 1), Fonts.Italic, 16, Parchment.Muted));
         else lines.Add((Text.Get("CHART_NO_PRICES"), Fonts.Italic, 16, Parchment.Muted));
         foreach (var contract in w.Player.Contracts.Where(k => k.To == hp.Id))
             lines.Add((Text.Get("PORT_CONTRACT_LINE", Text.Get("CONTRACT_" + ContractDef.Of(contract.Kind).Key), hp.Name, Parchment.DayWatch(contract.Deadline)), Fonts.Italic, 16, Ink.Red));
@@ -963,7 +941,6 @@ public partial class ChartKey : Control
             ("CHART_KEY_HAVEN", p => Mark(p, Faction.Brethren, false, false)),
             ("CHART_KEY_COVE", p => Mark(p, Faction.FreeTraders, false, true)),
             ("CHART_KEY_TREASURE", p => { DrawLine(p + new Vector2(-6, -6), p + new Vector2(6, 6), Ink.Red, 3f); DrawLine(p + new Vector2(-6, 6), p + new Vector2(6, -6), Ink.Red, 3f); }),
-            ("CHART_KEY_RUMOUR", p => { for (int k = 0; k < 12; k += 2) DrawArc(p, 8, k * Mathf.Tau / 12, (k + 1) * Mathf.Tau / 12, 4, Ink.Red, 1.4f); }),
             ("CHART_KEY_WRECK", p => { DrawLine(p + new Vector2(-6, 4), p + new Vector2(6, 4), Ink.Black, 1.8f); DrawLine(p + new Vector2(-1, 4), p + new Vector2(-3, -7), Ink.Black, 1.8f); }),
             ("CHART_KEY_PIN", p => { DrawLine(p + new Vector2(0, 7), p + new Vector2(0, -5), Ink.Red, 2f); DrawCircle(p + new Vector2(0, -6), 3.5f, Ink.Red); }),
             ("CHART_KEY_CONTRACT", p => { DrawArc(p, 5, 0, Mathf.Tau, 16, Ink.Red, 1.4f, true); DrawArc(p, 8.5f, 0, Mathf.Tau, 20, Ink.Red with { A = 0.7f }, 1.1f, true); }),

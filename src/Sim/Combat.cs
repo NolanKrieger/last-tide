@@ -10,7 +10,10 @@ public sealed class Cannonball
     public double Delay;   // seconds until this gun in the ripple fires (the view stages the smoke; the ball waits)
 }
 
-/// <summary>Barrels of cargo and chests of gold spilled by a sinking (GDD §8). They drift downwind and sink after a minute.</summary>
+/// <summary>
+/// Barrels of cargo and chests of gold spilled by a sinking (GDD §8), or a barrel adrift on the open sea
+/// (<see cref="World.DriftTick"/>). They drift downwind and sink after a minute (a barrel adrift floats longer).
+/// </summary>
 public sealed class Flotsam
 {
     public Vec2 Pos;
@@ -23,7 +26,9 @@ public sealed class Flotsam
 
 public enum CombatEventType { Fire, Hit, Splash, Ram, Sink, Collect, Rescued, Ring }
 
-public readonly record struct CombatEvent(CombatEventType Type, Vec2 Pos, int ShipId, double Strength);
+/// <param name="By">For a hit: the ship that fired (−1 for a fort, a beast or the sea), so the view can tell her own hits.</param>
+/// <param name="Good">For a pickup: the good hauled aboard (−1 for gold); <paramref name="Strength"/> is then the units or the gold.</param>
+public readonly record struct CombatEvent(CombatEventType Type, Vec2 Pos, int ShipId, double Strength, int By = -1, int Good = -1);
 
 public static class Geometry
 {

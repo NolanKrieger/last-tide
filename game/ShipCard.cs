@@ -103,6 +103,7 @@ public partial class ShipCard : CanvasLayer
             k = k * 131 + (long)Math.Round(s.Knots);
             k = k * 131 + (long)Math.Round(s.Pos.DistanceTo(world.Ship.Pos) / 10);
             k = k * 131 + (s.Ai?.CargoUnits ?? 0) * 64 + (s.Ai?.DestPort ?? -1);
+            k = k * 131 + (s.Ai?.News.Count ?? 0) + (s.PlayerHostile ? 8 : 0);
             k = k * 131 + (world.Hostile(s, world.Ship) ? 1 : 0) + (world.Hostile(world.Ship, s) ? 2 : 0);
             k = k * 131 + (long)Math.Round(world.Player.Rep(s.Faction));
             k = k * 131 + (long)Math.Round(world.Player.SlotsUsed * 10);
@@ -166,6 +167,9 @@ public partial class ShipCard : CanvasLayer
                 lading = LastTide.Text.Get("SHIPCARD_BOUND", lading, dest.Discovered ? dest.Name : LastTide.Text.Get("SHIPCARD_UNCHARTED"));
             }
             lines.Add(new CardLine(lading, body, 17, Ink.Black));
+            // Her news (Nolan, 2026-09-28): how many ports' prices she carries, and how to ask for them.
+            if (ai.News.Count > 0 && !s.PlayerHostile)
+                lines.Add(new CardLine(LastTide.Text.Get(ai.News.Count == 1 ? "SHIPCARD_NEWS_1" : "SHIPCARD_NEWS", ai.News.Count, N(World.HailRange)), italic, 16, Ink.Wind));
         }
         if (s.Faction == Faction.Brethren)
             lines.Add(new CardLine(LastTide.Text.Get("SHIPCARD_BOUNTY", world.Bounty(s)), body, 17, Ink.Red));

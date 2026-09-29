@@ -1,13 +1,19 @@
 namespace LastTide.Sim;
 
-/// <summary>A remembered price: what a good cost at a port the day the player saw it (GDD §5 ledger).</summary>
+/// <summary>
+/// A remembered price: what a good cost at a port on the day it was seen there (GDD §5 ledger). Prices are only ever
+/// learned in port: by her own purser, or from a merchant hailed at sea who traded there (<see cref="Teller"/>, dated
+/// the day of her visit, not the day of the hail).
+/// </summary>
 public sealed class LedgerEntry
 {
     public int Port { get; set; }
     public Good Good { get; set; }
     public double Price { get; set; }
     public double Day { get; set; }
-    public bool Rumor { get; set; }
+    /// <summary>The merchant ship whose master told her this price ("" = seen with her own eyes).</summary>
+    public string Teller { get; set; } = "";
+    public bool Heard => Teller.Length > 0;
 }
 
 /// <summary>Everything the player owns and remembers that is not the hull itself.</summary>
@@ -29,7 +35,6 @@ public sealed class Player
     public string[] Loadout = { "", "", "", "", "" };
     public string Cosmetic(string slot) => Loadout[Sim.Cosmetics.SlotIndex(slot)];
     public readonly List<BottleMap> BottleMaps = new();
-    public readonly List<CoveHint> CoveHints = new();
     public readonly List<Officer> Officers = new();
     /// <summary>Harbour-office work in hand (at most <see cref="World.MaxContracts"/>); their crates take hold space.</summary>
     public readonly List<Contract> Contracts = new();
@@ -132,10 +137,13 @@ public sealed class Player
         return best;
     }
 
-    public void Remember(int port, Good g, double price, double day, bool rumor)
+    /// <summary>Records a price seen (or told by <paramref name="teller"/>); an older record of the same good there is replaced,
+    /// a newer one kept.</summary>
+    public void Remember(int port, Good g, double price, double day, string teller = "")
     {
+        if (Remembered(port, g) is { } known && known.Day > day) return;
         Ledger.RemoveAll(e => e.Port == port && e.Good == g);
-        Ledger.Add(new LedgerEntry { Port = port, Good = g, Price = price, Day = day, Rumor = rumor });
+        Ledger.Add(new LedgerEntry { Port = port, Good = g, Price = price, Day = day, Teller = teller });
     }
 }
 

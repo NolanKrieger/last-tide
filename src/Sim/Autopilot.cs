@@ -20,10 +20,10 @@ public sealed class Autopilot
     /// <summary>Diagnostics: one line per decision worth reading (balance harness, tests).</summary>
     public Action<string>? Log;
 
-    const double PlanSpeed = 6.0;       // m/s assumed for voyage planning
+    const double PlanSpeed = 6.6;       // m/s assumed for voyage planning (half a sloop's top speed)
     const int Reserve = 30;             // gold kept for wages
     double fleeTime, repath;
-    int lastOrder = -1, fightTarget = -1;
+    int fightTarget = -1;
     Mode resume = Mode.Idle;              // what to go back to after a flee or a fight
     int lastThreatId = -1, sameThreatFlights;
     double threatDist = -1, threatDistAgo = -1, distClock;
@@ -49,7 +49,7 @@ public sealed class Autopilot
         double dt = Tuning.Dt;
         var ai = ship.Ai;
         ShipInput input;
-        int order = 0;
+        var order = CrewOrder.Balanced;
         bool lantern = false;
 
         foreach (var e in w.Events) if (e.Type == CombatEventType.Hit && e.ShipId == ship.Id) HitsTaken++;
@@ -74,13 +74,16 @@ public sealed class Autopilot
             {
                 State = Mode.Rescue;
                 input = Seamanship.SteerTo(w, ship, harbour.Harbor, full: true);
-                return Orders(w, input with { Order = Order(4) });
+                return Orders(w, Man(w, CrewOrder.Balanced, input));
             }
             if (State == Mode.Rescue) State = Mode.Idle;
         }
         // ---- a beast: carpenters first, guns when it shows itself, and away from it ----
         var beast = w.Monster;
-        if (beast != null && beast.State != MonsterState.Faded && State != Mode.Fight && State != Mode.Flee)
+        // A crocodile basking on its bank strikes only within 90 m of its perch, but it watches her for as long as she is
+        // in the Mangrove: clear of the perch, carry on (fleeing it for good stalled a whole voyage).
+        bool basking = beast is { Type: MonsterType.Crocodile, State: MonsterState.Perched } && beast.Perch.DistanceTo(ship.Pos) > 150;
+        if (beast != null && !basking && beast.State != MonsterState.Faded && State != Mode.Fight && State != Mode.Flee)
         {
             // Shoot at what can be hit: the nearest live tentacle or weed mass in a grip, else the beast itself (audit C-13).
             var aim = beast.Pos;
@@ -98,8 +101,8 @@ public sealed class Autopilot
             }
             // Carpenters first against a beast — but held by the Kraken the guns must be manned to cut her free:
             // under "repair" nobody serves them and a side takes 120 s to reload (audit C-13).
-            int beastOrder = w.Pinned && beast.Type == MonsterType.Kraken ? 1 : 3;
-            return Orders(w, bi with { FirePort = fireP, FireStarboard = fireS, Order = Order(beastOrder) });
+            var beastOrder = w.Pinned && beast.Type == MonsterType.Kraken ? CrewOrder.Battle : CrewOrder.Repair;
+            return Orders(w, Man(w, beastOrder, bi with { FirePort = fireP, FireStarboard = fireS }));
         }
         if (threat != null && State is not (Mode.Fight or Mode.Flee or Mode.Shelter))
         {
@@ -124,7 +127,7 @@ public sealed class Autopilot
             else
             {
                 input = Seamanship.Engage(w, ship, target);
-                return Orders(w, input with { Order = Order(1) });
+                return Orders(w, Man(w, CrewOrder.Battle, input));
             }
         }
         if (State == Mode.Flee)
@@ -142,8 +145,8 @@ public sealed class Autopilot
                     if (fort.InHarbor(ship.Pos)) { State = Mode.Shelter; shelterPort = fort.Id; shelterTime = 0; Shelters++; }
                 }
                 bool night = w.IsNight;
-                int fleeOrder = ship.Leaks == 0 && ship.Water < 5 ? 2 : ship.Water > 25 ? 3 : 4;   // speed while dry; carpenters first once she is taking water
-                return Orders(w, input with { Order = Order(fleeOrder), ToggleLantern = night && w.Lantern });
+                var fleeOrder = ship.Leaks == 0 && ship.Water < 5 ? CrewOrder.MakeSail : ship.Water > 25 ? CrewOrder.Repair : CrewOrder.Balanced;   // speed while dry; carpenters first once she is taking water
+                return Orders(w, Man(w, fleeOrder, input with { ToggleLantern = night && w.Lantern }));
             }
         }
 
@@ -165,12 +168,12 @@ public sealed class Autopilot
                 else input = new ShipInput(0, ship.SailTarget > 0 ? -1 : 0);
                 // Sell and mend while sheltering if the port is worth a stop; the clock stands still inside.
                 if (fort.InHarbor(ship.Pos) && w.IsOpen(fort) && WorthDocking(w, fort) && w.Apply(new PortCommand(PortAction.Dock)) == PortResult.Ok) return default;
-                return Orders(w, input with { Order = Order(4) });
+                return Orders(w, Man(w, CrewOrder.Balanced, input));
             }
         }
 
         // ---- housekeeping ----
-        order = ship.Leaks > 0 || ship.Water > 8 ? 3 : 4;
+        order = ship.Leaks > 0 || ship.Water > 8 ? CrewOrder.Repair : CrewOrder.Balanced;
         if (!w.Lantern && !w.IsNight) lantern = true;     // relight by day (it toggles)
         if (!w.Lantern && w.IsNight && threat == null) lantern = true;
 
@@ -186,7 +189,7 @@ public sealed class Autopilot
                     input = Seamanship.SteerTo(w, ship, site.DigRing, full: false);
                 else
                     input = new ShipInput(0, ship.SailTarget > 0 ? -1 : 0, Action: ship.SailTarget == 0 && ship.SailFraction < 0.05);
-                return Orders(w, input with { Order = Order(order), ToggleLantern = lantern });
+                return Orders(w, Man(w, order, input with { ToggleLantern = lantern }));
             }
         }
         else if (threat == null && ship.HullHp > ship.MaxHp * 0.5)
@@ -205,12 +208,12 @@ public sealed class Autopilot
         // ---- the voyage ----
         if (State == Mode.Idle && (w.Time - lastPlanTime > 5 || Dest < 0)) Plan(w);
         var dest = Dest >= 0 ? w.Map.Ports[Dest] : null;
-        if (dest == null) return Orders(w, new ShipInput(0, 0, Order: Order(order), ToggleLantern: lantern));
+        if (dest == null) return Orders(w, Man(w, order, new ShipInput(0, 0, ToggleLantern: lantern)));
         // Starving: the nearest open port wins over the plan.
         int need = (int)Math.Ceiling(ship.Crew / 4.0);
         if (w.Player.Units(Good.Provisions) < need)
         {
-            var near = NearestOpenPort(w, 5000);
+            var near = NearestOpenPort(w, 5000 * Map.Stretch);
             if (near != null && near.Id != Dest) SetDest(w, near.Id, Mode.Explore);
             dest = w.Map.Ports[Dest];
         }
@@ -228,7 +231,7 @@ public sealed class Autopilot
         // Stuck watch: no progress for a while → replan.
         if (ship.Pos.DistanceTo(lastPos) > 40) { lastPos = ship.Pos; lastProgressTime = w.Time; }
         else if (w.Time - lastProgressTime > 90) { lastProgressTime = w.Time; Plan(w, avoid: Dest); }
-        return Orders(w, input with { Order = Order(order), ToggleLantern = lantern });
+        return Orders(w, Man(w, order, input with { ToggleLantern = lantern }));
     }
 
     /// <summary>The destination, a port never visited, a good sale for the hold, a battered hull or an empty larder.</summary>
@@ -250,7 +253,18 @@ public sealed class Autopilot
         return false;
     }
 
-    int Order(int want) { if (want == lastOrder) return 0; lastOrder = want; return want; }
+    /// <summary>
+    /// Sets her hands the way <paramref name="order"/> would split them, through the crew panel's command as a player
+    /// does by hand (there are no order keys), whenever her stations differ from that split.
+    /// </summary>
+    ShipInput Man(World w, CrewOrder order, ShipInput input)
+    {
+        var ship = w.Ship;
+        ship.SplitFor(order, out int guns, out int sails, out int repair, out _);
+        ship.Split(out int g, out int s, out int r, out _);
+        if (guns != g || sails != s || repair != r) w.Apply(World.CrewStationsCommand(guns, sails, repair));
+        return input;
+    }
     /// <summary>Final say on the helm: never plough into another hull (a ram on a merchant makes an enemy and costs hull).</summary>
     ShipInput Orders(World w, ShipInput input)
     {
@@ -407,7 +421,7 @@ public sealed class Autopilot
             {
                 var g = def.Id;
                 if (def.Group == GoodGroup.Rare && !here.Secret) continue;
-                if (g is Good.Provisions or Good.Munitions or Good.Timber) continue;
+                if (g is Good.Provisions or Good.Munitions or Good.Timber || !Goods.IsTraded(g)) continue;   // no port sells fish
                 if (m.Stock[(int)g] <= 0) continue;
                 double unitCost = m.Price(g);
                 int maxUnits = Math.Min((int)Math.Floor(m.Stock[(int)g]), (int)Math.Floor(freeSlots / def.SlotsPerUnit));
@@ -486,7 +500,7 @@ public sealed class Autopilot
             foreach (var def in Goods.All)
             {
                 var g = def.Id;
-                if (g is Good.Provisions or Good.Timber || def.Group == GoodGroup.Rare || m.Stock[(int)g] < 3) continue;
+                if (g is Good.Provisions or Good.Timber || def.Group == GoodGroup.Rare || !Goods.IsTraded(g) || m.Stock[(int)g] < 3) continue;
                 double ratio = m.Price(g) / def.BasePrice;
                 if (ratio >= bestRatio) continue;
                 // A known buyer anywhere (dearer than here by a third) makes it a stake worth taking; blind, a small one.
@@ -509,7 +523,7 @@ public sealed class Autopilot
             if ((here != null && p.Id == here.Id) || p.Id == avoid || !p.Discovered || !w.IsOpen(p)) continue;
             double d = D(p);
             if (d < 0) continue;
-            double score = player.PortsVisited.Contains(p.Id) ? d + 3000 - 200 * Freshness(w, p) : d;
+            double score = player.PortsVisited.Contains(p.Id) ? d + 3000 * Map.Stretch - 200 * Freshness(w, p) : d;
             if (score < pickD) { pickD = score; pick = p; }
         }
         if (pick == null)
@@ -619,7 +633,6 @@ public sealed class Autopilot
             if (!w.HasUnique(u.Key) && player.Gold > u.Price + 300 && w.Apply(new PortCommand(PortAction.BuyUnique, Text: u.Key)) == PortResult.Ok) Upgrades++;
         if (w.TavernMap(port) != null && player.BottleMaps.Count < 2 && player.Gold > World.BottleMapPrice + 200)
             w.Apply(new PortCommand(PortAction.BuyMap));
-        if (player.Gold > 90) w.Apply(new PortCommand(PortAction.Rumor));
         // The next leg.
         PlanFrom = port.Id;
         Plan(w);

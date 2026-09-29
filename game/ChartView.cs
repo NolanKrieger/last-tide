@@ -588,7 +588,7 @@ public static class ChartArt
 /// <summary>
 /// Marks that appear during a run, inked like the chart and redrawn only when something changes: secret coves once
 /// found (a hidden jetty, two shacks, a red ring), the X and dig ring of a matched bottle map, revealed wrecks with
-/// their salvage ring, the "?" of a tavern rumour, and the player's ink pins. Hosts the port lettering and the
+/// their salvage ring, and the player's ink pins. Hosts the port lettering and the
 /// harbour-ring glow as children.
 /// </summary>
 public partial class MarksView : Node2D
@@ -630,7 +630,6 @@ public partial class MarksView : Node2D
         foreach (var t in world.Map.Treasures) if (t.Dug) h.Add(t.Id * 3 + 1);
         foreach (var m in world.Player.BottleMaps) if (m.Solved) h.Add(m.Treasure * 3 + 2);
         foreach (var wr in world.Map.Wrecks) h.Add(wr.Salvaged ? 1 : world.Reveal.IsRevealed(wr.Pos) ? 2 : 3);
-        foreach (var c in world.Player.CoveHints) { h.Add(c.X); h.Add(c.Y); }
         h.Add(Ink.PaletteVersion);
         return h.ToHashCode();
     }
@@ -708,19 +707,6 @@ public partial class MarksView : Node2D
             m.Tick(p + new Vector2(6, -30), p + new Vector2(12, -24), 0.8f, 0.4f, Ink.Black);
             DashedCircle(m, p, (float)wr.RingRadius * P, 26, 0.5f, Ink.Black with { A = 0.35f }, 1f);
         }
-        foreach (var hint in world.Player.CoveHints)
-        {
-            var c = Ink.V(new Vec2(hint.X, hint.Y));
-            float r = (float)hint.Radius * P;
-            DashedCircle(m, c, r, 90, 0.55f, Ink.Red with { A = 0.5f }, 1.6f);
-            // question marks sprinkled over the searched water
-            for (int k = 0; k < 7; k++)
-            {
-                float a = k * Mathf.Tau / 7 + 0.4f;
-                var at = k == 0 ? c : c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * r * 0.58f;
-                text.Items.Add((at, "?", 44, Ink.Red with { A = 0.62f }, Fonts.DisplayItalic));
-            }
-        }
         ink = m.Build();
         coves.Mesh = town.Build();
         coves.Atlas = Art.Tex("ports/atlas");
@@ -774,7 +760,7 @@ public partial class MarksView : Node2D
 }
 
 /// <summary>
-/// The lettering on the marks (notes, "dig here", rumour question marks) and the treasure X's: world-anchored but
+/// The lettering on the marks (notes, "dig here") and the treasure X's: world-anchored but
 /// counter-scaled with the zoom so they stay legible from the widest view to the closest.
 /// </summary>
 public partial class MarksText : Node2D

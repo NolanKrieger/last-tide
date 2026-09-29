@@ -88,7 +88,6 @@ public sealed partial class World
 
     void CombatTick(ShipInput playerInput)
     {
-        if (playerInput.Order is >= 1 and <= 4) Ship.Order = (CrewOrder)(playerInput.Order - 1);
         if (playerInput.FirePort) Fire(Ship, Side.Port);
         if (playerInput.FireStarboard) Fire(Ship, Side.Starboard);
 
@@ -131,7 +130,7 @@ public sealed partial class World
                     shotAt = Time;
                     if (b.From != MonsterType.None) { LastMonsterHit = b.From; MonsterHitTime = Time; }
                 }
-                Events.Add(new CombatEvent(CombatEventType.Hit, next, struck.Id, b.Damage));
+                Events.Add(new CombatEvent(CombatEventType.Hit, next, struck.Id, b.Damage, By: b.Shooter?.Id ?? -1));
                 if (b.Shooter?.IsPlayer == true) Draw(struck);
                 Balls.RemoveAt(i);
                 continue;
@@ -140,6 +139,13 @@ public sealed partial class World
             if (LandAlong(b.Pos, next) is { } shore)
             {
                 Events.Add(new CombatEvent(CombatEventType.Splash, shore, -1, 0));
+                Balls.RemoveAt(i);
+                continue;
+            }
+            // Nor through drift ice: a floe stops a ball as a shore does, so the Ice Reach's floes give cover too.
+            if (IceAlong(b.Pos, next) is { } ice)
+            {
+                Events.Add(new CombatEvent(CombatEventType.Splash, ice, -1, 0));
                 Balls.RemoveAt(i);
                 continue;
             }
@@ -208,12 +214,11 @@ public sealed partial class World
             }
             if (!Ship.Sunk && Geometry.SegmentDistance(f.Pos, f.Pos, fore, aft) <= CollectRadius + Ship.Hull.Beam * 0.5)
             {
-                bool taken = false;
                 if (f.Gold > 0)
                 {
                     Player.Gold += f.Gold;
                     Stats.GoldEarned += f.Gold;
-                    taken = true;
+                    Events.Add(new CombatEvent(CombatEventType.Collect, f.Pos, -1, f.Gold));
                 }
                 if (f.Good is { } g && f.Units > 0)
                 {
@@ -223,10 +228,9 @@ public sealed partial class World
                     {
                         Player.Cargo[(int)g] += take;
                         f.Units -= take;
-                        taken = true;
+                        Events.Add(new CombatEvent(CombatEventType.Collect, f.Pos, -1, take, Good: (int)g));   // what came aboard, for the view
                     }
                 }
-                if (taken) Events.Add(new CombatEvent(CombatEventType.Collect, f.Pos, -1, f.Gold));
                 if (f.Gold > 0 || f.Units <= 0) Flotsam.RemoveAt(i);
             }
         }

@@ -382,7 +382,7 @@ public static class Parchment
         return c;
     }
 
-    /// <summary>The good's illustration (27 in <c>goods/goods.png</c>, 8 × 128 px cells in enum order).</summary>
+    /// <summary>The good's illustration (28 in <c>goods/goods.png</c>, 8 × 128 px cells in enum order; the fish is cell 27).</summary>
     public static Texture2D? GoodIcon(Good g) => Cell("goods/goods", (int)g, 8, 128);
     /// <summary>The part's illustration (9 in <c>parts/parts.png</c>, 3 × 128 px cells in enum order).</summary>
     public static Texture2D? PartIcon(Part p) => Cell("parts/parts", (int)p, 3, 128);

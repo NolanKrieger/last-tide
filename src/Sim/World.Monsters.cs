@@ -68,7 +68,7 @@ public sealed partial class World
             var def = RegionDef.Of(region);
             if (def.Monster == MonsterType.None || Docked != null) return;
             if (def.Monster == MonsterType.GhostShip && !GhostWeather(ConditionsAt(Ship.Pos))) return;   // it walks only in fog or dark (audit C-16)
-            double chance = MonsterBaseChancePerHour * ThreatNow * (IsNight ? 2 : 1);
+            double chance = MonsterBaseChancePerHour * ThreatNow * (IsNight ? 2 : 1) * ShoreFactor(def.Monster);
             if (Rng.NextDouble() < chance) SpawnMonster(def.Monster);
             return;
         }
@@ -93,6 +93,17 @@ public sealed partial class World
             MonsterClock = MonsterRest / (1 + 2 * EdgePressure(beyond));   // out there the next is not long coming
         }
     }
+
+    /// <summary>Beyond which a sea beast rises at its full rate (m from land); at the shore, <see cref="MonsterShoreShare"/> of it.</summary>
+    public const double MonsterOpenWater = 400, MonsterShoreShare = 0.3;
+
+    /// <summary>
+    /// The deep-water beasts rise less often near land (Nolan, 2026-09-28): the serpent, the Kraken, the ghost ship and the
+    /// weed-kraken at 30% by the shore, full strength 400 m out. The crocodile and the siren live on the bank and the rock,
+    /// so land is where they wait.
+    /// </summary>
+    public double ShoreFactor(MonsterType type) => type is MonsterType.Crocodile or MonsterType.Siren ? 1
+        : Shore.Openness(Shore.Distance(Map, Ship.Pos, MonsterOpenWater), MonsterShoreShare, MonsterOpenWater);
 
     public Monster SpawnMonster(MonsterType type)
     {
@@ -174,7 +185,7 @@ public sealed partial class World
         {
             case MonsterState.Approach:
                 m.Surfaced = false;
-                MoveToward(m, Ship.Pos + Ship.Right * (22 * m.Side), 9);
+                MoveToward(m, Ship.Pos + Ship.Right * (22 * m.Side), 9.9);
                 if (m.Pos.DistanceTo(Ship.Pos + Ship.Right * (22 * m.Side)) < 6)
                 {
                     m.State = MonsterState.Surfaced;
@@ -193,7 +204,7 @@ public sealed partial class World
                 break;
             case MonsterState.Dive:
                 m.Timer -= Dt;
-                MoveToward(m, Ship.Pos - Ship.Forward * 120, 9);
+                MoveToward(m, Ship.Pos - Ship.Forward * 120, 9.9);
                 if (m.Timer <= 0) m.State = MonsterState.Approach;
                 break;
         }
@@ -212,7 +223,7 @@ public sealed partial class World
         {
             case MonsterState.Approach:
                 if (region != m.Def.Region) { m.Done = true; return; }   // it will not follow her out of the Deep (audit C-06)
-                MoveToward(m, Ship.Pos, 20);   // nothing under sail outruns it
+                MoveToward(m, Ship.Pos, 22);   // nothing under sail outruns it
                 if (m.Pos.DistanceTo(Ship.Pos) < 15)
                 {
                     m.State = MonsterState.Grip;
@@ -291,7 +302,7 @@ public sealed partial class World
         }
     }
 
-    const double GhostTopSpeed = 12, GhostTurnRate = 0.45;   // m/s; rad/s at steerage way (a sloop at ⅓ sail: 0.7)
+    const double GhostTopSpeed = 13.2, GhostTurnRate = 0.45;   // m/s (a stock sloop's top); rad/s at steerage way (a sloop at ⅓ sail: 0.7)
 
     /// <summary>She sails to her station like a ship: along her bow, turning at a ship's rate, slowing to come round,
     /// never sliding sideways. Changing sides she crosses well under the player's stern rather than through her.
@@ -329,7 +340,7 @@ public sealed partial class World
                 if (Ship.Pos.DistanceTo(m.Perch) < 90 && m.Age > 2) { m.State = MonsterState.Approach; m.Surfaced = false; }
                 break;
             case MonsterState.Approach:
-                MoveToward(m, Ship.Pos, 14);
+                MoveToward(m, Ship.Pos, 15.4);
                 if (m.Pos.DistanceTo(Ship.Pos) < 9)
                 {
                     MonsterHits(MonsterType.Crocodile, 10);
@@ -359,7 +370,7 @@ public sealed partial class World
         {
             case MonsterState.Approach:
                 if (region != m.Def.Region) { m.Done = true; return; }   // the weed ends where the Sargasso ends (audit C-06)
-                MoveToward(m, Ship.Pos, 13);
+                MoveToward(m, Ship.Pos, 14.3);
                 if (m.Pos.DistanceTo(Ship.Pos) < 12)
                 {
                     m.State = MonsterState.Grip;

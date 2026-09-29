@@ -13,6 +13,8 @@ public sealed class Market
     public const double DriftPerDay = 0.15;
     public const double NoisePerHour = 0.01;
 
+    static readonly bool[] Traded = Goods.All.Select(g => Goods.IsTraded(g.Id)).ToArray();
+
     public readonly double[] Stock = new double[Goods.Count];
     public readonly double[] Target = new double[Goods.Count];
     readonly double[] mult = new double[Goods.Count];
@@ -29,6 +31,14 @@ public sealed class Market
             // consumers exactly the base, goods nobody here trades keep a smaller float.
             double t = role == ProducerMult ? size * 1.5 : role == ConsumerMult ? size : size * 0.6;
             if (Goods.IsRare(g) && !port.Secret) t = 15;
+            if (!Goods.IsTraded(g))
+            {
+                // The catch: every port buys fish, dearer where food is short (a port that takes in provisions), and
+                // only wants so much before the price sinks. No draw from the generator's dice, so maps stay as they were.
+                mult[i] = port.Consumes.Contains(Good.Provisions) ? ConsumerMult : NeutralMult;
+                Target[i] = Stock[i] = size * 0.25;
+                continue;
+            }
             Target[i] = t;
             Stock[i] = Math.Max(1, t * rng.Range(0.7, 1.3));
         }
@@ -85,7 +95,9 @@ public sealed class Market
         double n = NoisePerHour * Math.Sqrt(dt / Tuning.SecondsPerHour);
         for (int i = 0; i < Goods.Count; i++)
         {
-            Stock[i] += (Target[i] - Stock[i]) * k + Target[i] * n * rng.NextGaussian();
+            // The catch only settles back toward what the port wants: no noise, so no draw from the world's dice, and the
+            // sea runs exactly as it did before there was fish.
+            Stock[i] += (Target[i] - Stock[i]) * k + (Traded[i] ? Target[i] * n * rng.NextGaussian() : 0);
             if (Stock[i] < 0.5) Stock[i] = 0.5;
         }
     }

@@ -131,10 +131,18 @@ public class MapGenTests
     [Fact]
     public void LagoonsAndBaysHoldHarbours()
     {
-        // Ports favour shelter: on average they sit in more enclosed water than a random point of the same coasts.
+        // Ports favour shelter: on average they sit in more enclosed water than points just off the same coasts.
         var map = MapGen.Generate(12);
         double ports = map.Ports.Average(p => MapGen.Shelter(map, p.Harbor));
-        Assert.True(ports > 0.5, $"mean harbour shelter {ports:F2}");
+        var coast = new List<double>();
+        foreach (var island in map.Ports.Select(p => map.Islands[p.IslandId]).Distinct())
+            for (int i = 0; i < island.Points.Length; i += Math.Max(1, island.Points.Length / 12))
+            {
+                var v = island.Points[i];
+                var at = v + (v - island.Centre).Normalized * 76;   // about where a harbour ring's centre lies off its coast
+                if (map.Nav.IsOpenSea(at) && !island.Contains(at)) coast.Add(MapGen.Shelter(map, at));
+            }
+        Assert.True(ports > coast.Average() + 0.02, $"mean harbour shelter {ports:F2}, off the same coasts {coast.Average():F2}");
         // Somewhere on the map a harbour lies inside a lagoon or deep bay.
         Assert.Contains(map.Ports, p => MapGen.Shelter(map, p.Harbor) >= 0.8);
     }
@@ -157,6 +165,12 @@ public class MapGenTests
             var map = MapGen.Generate(seed);
             foreach (var good in Goods.All)
             {
+                if (!Goods.IsTraded(good.Id))
+                {
+                    // Her own catch: no port makes it or lists it; every market buys it (FishingTests).
+                    Assert.All(map.Ports, p => Assert.False(p.Produces.Contains(good.Id) || p.Consumes.Contains(good.Id)));
+                    continue;
+                }
                 int producers = map.Ports.Count(p => p.Produces.Contains(good.Id));
                 int consumers = map.Ports.Count(p => p.Consumes.Contains(good.Id));
                 if (good.Group == GoodGroup.Rare)
@@ -238,10 +252,15 @@ public class MapGenTests
         w.Ship.SailTarget = 3;
         w.Ship.SailFraction = 1;
         w.Islands.Clear();
-        w.Ship.Heading = (w.Map.RegionOf(RegionType.Deep).Seed - w.Ship.Pos).Angle;
+        // The Trade Isles are charted from the start: set out from just inside their charted edge on the way to the Deep.
+        var deep = w.Map.RegionOf(RegionType.Deep).Seed;
+        var dir = (deep - w.Ship.Pos).Normalized;
+        var at = w.Ship.Pos;
+        while (Map.InBounds(at) && w.Reveal.IsRevealed(at + dir * 50)) at += dir * 50;
+        w.Ship.Pos = at - dir * 300;
+        w.Ship.Heading = (deep - w.Ship.Pos).Angle;
         w.Wind.SetFixed(w.Ship.Heading, 8);
         for (int i = 0; i < 30 * 200; i++) w.Tick(new ShipInput(0, 0));
-        // Much of the way lies in the Trade Isles, charted from the start on the 18 km chart: a thousand new cells is plenty.
         Assert.True(w.Reveal.RevealedCells > 1000 + (int)(before * w.Reveal.W * w.Reveal.H), $"{before:P2} → {w.Reveal.Fraction:P2}");
         var loaded = World.LoadJson(w.SaveJson());
         Assert.Equal(w.Reveal.RevealedCells, loaded.Reveal.RevealedCells);
@@ -261,7 +280,7 @@ public class MapGenTests
         bool found = false;
         foreach (var dir in new[] { new Vec2(1, 0), new Vec2(-1, 0), new Vec2(0, 1), new Vec2(0, -1) })
         {
-            for (double step = 200; step < 2500 && !found; step += 50)
+            for (double step = 200; step < 2500 * Map.Stretch && !found; step += 50)
             {
                 var candidate = mangrove.Seed + dir * step;
                 if (Map.InBounds(candidate) && Math.Abs(candidate.X) < Map.HalfW - 100 && Math.Abs(candidate.Y) < Map.HalfH - 100

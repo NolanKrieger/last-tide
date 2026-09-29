@@ -123,27 +123,6 @@ public class ExplorationTests
     }
 
     [Fact]
-    public void RumorsMayMarkACoveArea()
-    {
-        var w = Quiet(gold: 20000);
-        Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.Dock)));
-        int tries = 0;
-        while (w.Player.CoveHints.Count == 0 && tries++ < 60)
-            Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.Rumor)));
-        Assert.Single(w.Player.CoveHints);
-        var hint = w.Player.CoveHints[0];
-        var cove = w.Map.Ports[hint.Port];
-        Assert.True(cove.Secret);
-        Assert.True(new Vec2(hint.X, hint.Y).DistanceTo(cove.Harbor) <= 250.01);
-        Assert.Equal(400, hint.Radius);
-        Assert.True(w.LastRumorWasCove || tries > 1);
-        Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.CastOff)));
-        cove.Discovered = true;
-        for (int i = 0; i < 31; i++) w.Tick(new ShipInput(0, 0));
-        Assert.Empty(w.Player.CoveHints);
-    }
-
-    [Fact]
     public void AchievementsWatchTheRun()
     {
         var w = Quiet(seed: 5);
@@ -174,7 +153,6 @@ public class ExplorationTests
         w.Player.Unique.Add("long_nines");
         w.ApplyUnique();
         w.GiveBottleMap(w.Map.Treasures[0].Id);
-        w.Player.CoveHints.Add(new CoveHint { Port = w.Map.Ports.First(p => p.Secret).Id, X = 1, Y = 2, Radius = 400 });
         w.Player.Cosmetics.Add("flag_black");
         w.Ship.Pos = w.Map.Wrecks[0].Pos;
         w.Tick(new ShipInput(0, 0, Action: true));
@@ -184,7 +162,6 @@ public class ExplorationTests
         Assert.Contains("long_nines", loaded.Player.Unique);
         Assert.Equal(220, loaded.Ship.Range, 6);
         Assert.Single(loaded.Player.BottleMaps);
-        Assert.Single(loaded.Player.CoveHints);
         Assert.Contains("flag_black", loaded.Player.Cosmetics);
         Assert.True(loaded.Digging);
         Assert.Equal(w.Hash(), loaded.Hash());

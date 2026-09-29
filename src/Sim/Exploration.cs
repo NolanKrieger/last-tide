@@ -38,12 +38,3 @@ public sealed class BottleMap
     public bool Solved { get; set; }
     public double Rotation { get; set; }   // the sketch is drawn turned, so the shape must be read
 }
-
-/// <summary>A tavern rumor of a cove: a "?" area on the chart (GDD §10).</summary>
-public sealed class CoveHint
-{
-    public int Port { get; set; }
-    public double X { get; set; }
-    public double Y { get; set; }
-    public double Radius { get; set; }
-}

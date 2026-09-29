@@ -206,13 +206,13 @@ public sealed partial class World
             {
                 if (port == home || port.Secret || port.Produces.Contains(good)) continue;
                 double d = port.Harbor.DistanceTo(home.Harbor);
-                if (d < 2200 && (port.Consumes.Contains(good) || Rng.NextDouble() < 0.25))
+                if (d < MerchantRun && (port.Consumes.Contains(good) || Rng.NextDouble() < 0.25))
                     candidates.Add((port, good));
             }
         if (candidates.Count == 0)
         {
             // Nothing to sell: sail to a neighbour anyway and try there.
-            var ports = Map.Ports.Where(p => p != home && !p.Secret && p.Harbor.DistanceTo(home.Harbor) < 2200).ToList();
+            var ports = Map.Ports.Where(p => p != home && !p.Secret && p.Harbor.DistanceTo(home.Harbor) < MerchantRun).ToList();
             if (ports.Count == 0) return;
             candidates.Add((ports[Rng.Next(ports.Count)], home.Produces.Count > 0 ? home.Produces[0] : Good.Provisions));
         }
@@ -222,6 +222,7 @@ public sealed partial class World
         int units = Math.Min((int)Math.Floor(home.Market.Stock[(int)pick.good] * 0.3), Math.Min(30, ship.Hull.Cargo));
         units = Math.Max(0, units);
         home.Market.TakeStock(pick.good, units);
+        RecordNews(ship, home);   // she knows the prices she loaded at
         ai.CargoGood = pick.good;
         ai.CargoUnits = units;
         ai.DestPort = pick.port.Id;
@@ -235,8 +236,10 @@ public sealed partial class World
     // 500 lanes). Now each harbour gets one breadth-first sea-distance field over the water round it (LaneReach), warmed
     // one a tick from the start of a voyage with traffic, and a lane is the walk down that field from the other harbour,
     // string-pulled. Lanes depend on the map alone, so when they are computed changes nothing (save/load and replays agree).
-    /// <summary>How far round a destination its sea-distance field reaches: past the longest merchant run (2.2 km) with room for detours.</summary>
-    public const double LaneReach = 3600;
+    /// <summary>The longest merchant run, harbour to harbour as the crow flies (2.2 km on v6's chart, stretched with the sea).</summary>
+    public const double MerchantRun = 2200 * Map.Stretch;
+    /// <summary>How far round a destination its sea-distance field reaches: past the longest merchant run with room for detours.</summary>
+    public const double LaneReach = 3600 * Map.Stretch;
     int fieldsWarmed;
 
     NavGrid.LocalField HarbourField(Port port) => Map.Nav.LocalDistances(port.Harbor, LaneReach);
@@ -253,7 +256,7 @@ public sealed partial class World
         NavGrid.LocalField? field = null;
         foreach (var from in Map.Ports)
         {
-            if (from == to || from.Secret || routeCache.ContainsKey((from.Id, to.Id)) || from.Harbor.DistanceTo(to.Harbor) > 2200) continue;
+            if (from == to || from.Secret || routeCache.ContainsKey((from.Id, to.Id)) || from.Harbor.DistanceTo(to.Harbor) > MerchantRun) continue;
             field ??= HarbourField(to);
             routeCache[(from.Id, to.Id)] = Trace(from, to, field.Value);
         }
@@ -344,6 +347,7 @@ public sealed partial class World
         MerchantArrivals++;
         if (ai.CargoUnits > 0) dest.Market.AddStock(ai.CargoGood, ai.CargoUnits);
         ai.CargoUnits = 0;
+        RecordNews(ship, dest);   // and the prices she sold at
         ai.HomePort = dest.Id;
         ai.DestPort = -1;
         ai.Path.Clear();

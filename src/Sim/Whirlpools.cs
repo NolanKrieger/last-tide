@@ -36,11 +36,15 @@ public readonly record struct Whirlpool(Vec2 Pos, double Radius, double Strength
 /// Where the whirlpools are (GDD §5 "Beyond the chart", §19). The Maelstrom Straits keep theirs in the map, placed by
 /// the generator in the narrows. Beyond the chart's edge they are procedural: one may turn in each
 /// <see cref="OuterCell"/>-metre cell, none near the edge, more and bigger the further out, until by
-/// <see cref="OuterFull"/> they crowd every cell and their pulls overlap — the sea's own end to the world.
+/// <see cref="OuterFull"/> they crowd every cell — the sea's own end to the world. Each keeps inside its own cell, so no
+/// two ever overlap.
 /// </summary>
 public static class Whirlpools
 {
     public const double OuterCell = 420, OuterStart = 300, OuterFull = 3200;
+    /// <summary>Water kept between an outer whirlpool's rim and its cell's walls (so between neighbours: twice this), and
+    /// between its rim and the chart's edge.</summary>
+    public const double CellMargin = 6, EdgeMargin = 150;
 
     /// <summary>Every whirlpool whose reach comes within <paramref name="radius"/> of a point.</summary>
     public static void Near(Map map, Vec2 p, double radius, List<Whirlpool> into)
@@ -70,7 +74,13 @@ public static class Whirlpools
         var pos = centre + new Vec2(U() - 0.5, U() - 0.5) * (OuterCell * 0.5);
         double radius = 80 + 90 * U() + 110 * depth;
         double strength = 2.5 + 2 * U() + 4 * depth;
-        if (Map.BeyondEdge(pos) < OuterStart) return null;
+        double beyondPos = Map.BeyondEdge(pos);
+        if (beyondPos < OuterStart) return null;
+        // Never over anything, nor near land (Nolan, 2026-09-28): each keeps inside its own cell, so no two touch, and its
+        // rim stays EdgeMargin out past the chart's edge, clear of every island, harbour and floe on the chart.
+        double x0 = cx * OuterCell, y0 = cy * OuterCell;
+        double room = Math.Min(Math.Min(pos.X - x0, x0 + OuterCell - pos.X), Math.Min(pos.Y - y0, y0 + OuterCell - pos.Y)) - CellMargin;
+        radius = Math.Min(radius, Math.Min(room, beyondPos - EdgeMargin));
         return new Whirlpool(pos, radius, strength);
     }
 

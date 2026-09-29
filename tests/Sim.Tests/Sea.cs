@@ -14,6 +14,7 @@ static class Sea
         w.Wind.SetFixed(Angles.Wrap(Angles.FromCompassDeg(fromCompass) + Math.PI), speed);
         w.MonstersEnabled = false;
         w.DirectorEnabled = false;
+        w.DriftEnabled = false;
         w.Islands.Clear();
         w.Map.Whirlpools.Clear();
         w.Ship.Pos = Vec2.Zero;

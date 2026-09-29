@@ -105,11 +105,13 @@ public sealed partial class World
         public List<string> Cosmetics { get; set; } = new();
         public List<string> Loadout { get; set; } = new();
         public List<BottleMap> BottleMaps { get; set; } = new();
-        public List<CoveHint> CoveHints { get; set; } = new();
         public bool Digging { get; set; }
         public bool DigWreck { get; set; }
         public double DigProgress { get; set; }
+        public bool LinesOut { get; set; }
+        public double FishCatch { get; set; }
         public bool MonstersEnabled { get; set; } = true;
+        public bool DriftEnabled { get; set; } = true;
         public int[] Parts { get; set; } = new int[8];
         public int[] CustomStations { get; set; } = new int[4];
         public List<int[]> Officers { get; set; } = new();
@@ -196,6 +198,7 @@ public sealed partial class World
         public double PatchWork { get; set; }
         public double RamCooldown { get; set; }
         public int LastHitBy { get; set; } = -1;
+        public List<PortNews> News { get; set; } = new();
         public bool Foundering { get; set; }
         public double Hourglass { get; set; }
         public bool WaterOnlyStand { get; set; }
@@ -264,7 +267,7 @@ public sealed partial class World
         Gold = Player.Gold, Cargo = (int[])Player.Cargo.Clone(), CostBasis = (double[])Player.CostBasis.Clone(),
         LotPort = (int[])Player.LotPort.Clone(), LotUnits = (int[])Player.LotUnits.Clone(), LotGold = (double[])Player.LotGold.Clone(),
         Crew = Ship.Crew, Unpaid = Player.Unpaid, Reputation = (double[])Player.Reputation.Clone(),
-        Ledger = Player.Ledger.Select(e => new LedgerEntry { Port = e.Port, Good = e.Good, Price = e.Price, Day = e.Day, Rumor = e.Rumor }).ToList(),
+        Ledger = Player.Ledger.Select(e => new LedgerEntry { Port = e.Port, Good = e.Good, Price = e.Price, Day = e.Day, Teller = e.Teller }).ToList(),
         PortsVisited = Player.PortsVisited.ToList(), ShipName = Player.ShipName,
         Docked = Docked?.Id ?? -1, TradedThisVisit = tradedThisVisit, LastUpkeepDay = lastUpkeepDay, LastDockPort = lastDockPort, LastDockDay = lastDockDay,
         Stocks = Map.Ports.Select(p => (double[])p.Market.Stock.Clone()).ToArray(),
@@ -281,7 +284,7 @@ public sealed partial class World
             SailTarget = o.SailTarget, Scale = o.Ai.Scale, DamageMult = o.DamageMult, PlayerHostile = o.PlayerHostile,
             AngVel = o.AngVel, Rudder = o.Rudder, SailFraction = o.SailFraction, Order = (int)o.Order,
             Loaded = (bool[])o.Loaded.Clone(), Reload = (double[])o.Reload.Clone(), CarpenterWork = o.CarpenterWork, PatchWork = o.PatchWork,
-            RamCooldown = o.RamCooldown, LastHitBy = o.LastHitBy?.Id ?? -1, Foundering = o.Foundering, Hourglass = o.Hourglass, WaterOnlyStand = o.WaterOnlyStand,
+            RamCooldown = o.RamCooldown, LastHitBy = o.LastHitBy?.Id ?? -1, News = o.Ai.News.Select(n => new PortNews { Port = n.Port, Day = n.Day, Goods = n.Goods.ToList(), Prices = n.Prices.ToList() }).ToList(), Foundering = o.Foundering, Hourglass = o.Hourglass, WaterOnlyStand = o.WaterOnlyStand,
             Path = o.Ai.Path.SelectMany(p => new[] { p.X, p.Y }).ToList(), PathIndex = o.Ai.PathIndex, Repath = o.Ai.Repath, Tack = o.Ai.Tack, TackHold = o.Ai.TackHold,
             TargetShip = o.Ai.TargetShip, Lost = o.Ai.Lost, WaypointX = o.Ai.Waypoint.X, WaypointY = o.Ai.Waypoint.Y, HasWaypoint = o.Ai.HasWaypoint,
             Fleeing = o.Ai.Fleeing, FleeTime = o.Ai.FleeTime, Id = o.Id,
@@ -290,11 +293,10 @@ public sealed partial class World
         Flotsam = Flotsam.Select(f => new FlotsamSave { X = f.Pos.X, Y = f.Pos.Y, Good = f.Good.HasValue ? (int)f.Good.Value : -1, Units = f.Units, Gold = f.Gold, Life = f.Life, Bob = f.Bob }).ToList(),
         Balls = Balls.Select(b => new BallSave { X = b.Pos.X, Y = b.Pos.Y, VX = b.Vel.X, VY = b.Vel.Y, Life = b.Life, Shooter = b.Shooter?.Id ?? -1, Damage = b.Damage, Delay = b.Delay }).ToList(),
         FortClocks = new Dictionary<int, double>(fortClocks), NextShipId = nextShipId,
-        Lantern = Lantern, TornSails = Ship.TornSails, StormClock = Weather.SpawnClock, DirectorEnabled = DirectorEnabled, MonstersEnabled = MonstersEnabled,
+        Lantern = Lantern, TornSails = Ship.TornSails, StormClock = Weather.SpawnClock, DirectorEnabled = DirectorEnabled, MonstersEnabled = MonstersEnabled, DriftEnabled = DriftEnabled,
         Unique = Player.Unique.ToList(), Cosmetics = Player.Cosmetics.ToList(), Loadout = Player.Loadout.ToList(),
         BottleMaps = Player.BottleMaps.Select(m => new BottleMap { Treasure = m.Treasure, Solved = m.Solved, Rotation = m.Rotation }).ToList(),
-        CoveHints = Player.CoveHints.Select(c => new CoveHint { Port = c.Port, X = c.X, Y = c.Y, Radius = c.Radius }).ToList(),
-        Digging = Digging, DigWreck = digWreck, DigProgress = DigProgress,
+        Digging = Digging, DigWreck = digWreck, DigProgress = DigProgress, LinesOut = LinesOut, FishCatch = FishCatch,
         Parts = (int[])Ship.Parts.Clone(), CustomStations = (int[])Ship.CustomStations.Clone(),
         Officers = Player.Officers.Select(o => new[] { (int)o.Type, o.Tier }).ToList(), CartographerRule = true, HullsOwned = Stats.HullsOwned.ToList(), MarinesClock = marinesClock,
         Achievements = Player.Achievements.ToList(), MonstersBeaten = Stats.MonstersBeaten, MonsterClock = MonsterClock, EruptionClock = EruptionClock, RudderJam = RudderJam,
@@ -361,13 +363,14 @@ public sealed partial class World
         foreach (int id in s.SalvagedWrecks) w.Map.Wrecks[id].Salvaged = true;
         w.Pins.AddRange(s.Pins);
         w.Player.Gold = s.Gold;
-        if (s.Cargo.Length == Goods.Count) s.Cargo.CopyTo(w.Player.Cargo, 0);
-        if (s.CostBasis.Length == Goods.Count) s.CostBasis.CopyTo(w.Player.CostBasis, 0);
-        if (s.LotPort.Length == Goods.Count && s.LotUnits.Length == Goods.Count && s.LotGold.Length == Goods.Count)
+        // Per-good arrays from before the fish was added are one short: the goods they hold keep their places.
+        CopyGoods(s.Cargo, w.Player.Cargo);
+        CopyGoods(s.CostBasis, w.Player.CostBasis);
+        if (s.LotPort.Length == s.LotUnits.Length && s.LotUnits.Length == s.LotGold.Length)
         {
-            s.LotPort.CopyTo(w.Player.LotPort, 0);
-            s.LotUnits.CopyTo(w.Player.LotUnits, 0);
-            s.LotGold.CopyTo(w.Player.LotGold, 0);
+            CopyGoods(s.LotPort, w.Player.LotPort);
+            CopyGoods(s.LotUnits, w.Player.LotUnits);
+            CopyGoods(s.LotGold, w.Player.LotGold);
         }
         w.Ship.Crew = s.Crew;
         w.Player.Unpaid = s.Unpaid;
@@ -382,7 +385,7 @@ public sealed partial class World
         w.lastDockDay = s.LastDockPort >= 0 ? s.LastDockDay : w.Day;
         w.lastUpkeepDay = s.LastUpkeepDay;
         for (int i = 0; i < Math.Min(s.Stocks.Length, w.Map.Ports.Count); i++)
-            if (s.Stocks[i].Length == Goods.Count) s.Stocks[i].CopyTo(w.Map.Ports[i].Market.Stock, 0);
+            CopyGoods(s.Stocks[i], w.Map.Ports[i].Market.Stock);
         w.Stats.GoldEarned = s.GoldEarned;
         w.Stats.ShipsSunk = s.ShipsSunk;
         w.Stats.LeaguesSailed = s.LeaguesSailed;
@@ -436,6 +439,7 @@ public sealed partial class World
                 Role = role, HomePort = o.HomePort, DestPort = o.DestPort, CargoGood = (Good)o.CargoGood, CargoUnits = o.CargoUnits, Wait = o.Wait, Scale = o.Scale,
                 Path = path, PathIndex = o.PathIndex, Repath = o.Repath, Tack = o.Tack, TackHold = o.TackHold, TargetShip = o.TargetShip, Lost = o.Lost,
                 Waypoint = new Vec2(o.WaypointX, o.WaypointY), HasWaypoint = o.HasWaypoint, Fleeing = o.Fleeing, FleeTime = o.FleeTime,
+                News = o.News.Where(n => n.Port >= 0 && n.Port < w.Map.Ports.Count && n.Goods.Count == n.Prices.Count && n.Goods.All(g => (int)g >= 0 && (int)g < Goods.Count)).ToList(),
             };
             byId[ship.Id] = ship;
         }
@@ -453,14 +457,15 @@ public sealed partial class World
         w.Lantern = s.Lantern;
         w.DirectorEnabled = s.DirectorEnabled;
         w.MonstersEnabled = s.MonstersEnabled;
+        w.DriftEnabled = s.DriftEnabled;
         foreach (var u in s.Unique) if (BlackMarketDef.All.Any(d => d.Key == u)) w.Player.Unique.Add(u);   // the bilge engine is gone
         foreach (var c in s.Cosmetics) w.Player.Cosmetics.Add(c);
         for (int i = 0; i < w.Player.Loadout.Length && i < s.Loadout.Count; i++) w.Player.Loadout[i] = s.Loadout[i] ?? "";
         w.Player.BottleMaps.AddRange(s.BottleMaps);
-        w.Player.CoveHints.AddRange(s.CoveHints);
         w.Digging = s.Digging;
         w.digWreck = s.DigWreck;
         w.DigProgress = s.DigProgress;
+        w.RestoreFishing(s.LinesOut, s.FishCatch);
         if (s.Parts.Length == 8) s.Parts.CopyTo(w.Ship.Parts, 0);
         else if (s.Parts.Length == 9) s.Parts.Where((_, i) => i != 6).ToArray().CopyTo(w.Ship.Parts, 0);   // older saves carried the pumps at 6
         if (s.CustomStations.Length == 4) s.CustomStations.CopyTo(w.Ship.CustomStations, 0);
@@ -506,7 +511,12 @@ public sealed partial class World
         w.coreClock = s.WhirlpoolCoreClock;
         w.IceHitTime = s.IceHitTime;
         for (int i = 0; i < Math.Min(s.PricesLastVisit.Count, w.Map.Ports.Count); i++)
-            if (s.PricesLastVisit[i] is { } prices && prices.Length == Goods.Count) w.Map.Ports[i].PricesLastVisit = prices;
+            if (s.PricesLastVisit[i] is { } prices && prices.Length is > 0 and <= Goods.Count)
+            {
+                var all = new double?[Goods.Count];
+                prices.CopyTo(all, 0);
+                w.Map.Ports[i].PricesLastVisit = all;
+            }
         foreach (var lane in s.Lanes)
         {
             if (lane.Length < 2 || lane.Length % 2 != 0) continue;
@@ -555,7 +565,7 @@ public sealed partial class World
         Need(s.Docked < ports && s.DiscoveredPorts.All(i => In(i, ports)) && s.PortsVisited.All(i => In(i, ports)), "port index");
         Need(s.DugTreasures.All(i => In(i, map.Treasures.Count)) && s.BottleMaps.All(m => In(m.Treasure, map.Treasures.Count)), "treasure index");
         Need(s.SalvagedWrecks.All(i => In(i, map.Wrecks.Count)), "wreck index");
-        Need(s.CoveHints.All(h => In(h.Port, ports)) && s.Ledger.All(e => In(e.Port, ports) && In((int)e.Good, Goods.Count)), "ledger or rumour port");
+        Need(s.Ledger.All(e => In(e.Port, ports) && In((int)e.Good, Goods.Count)), "ledger port");
         Need(s.Ships.All(o => o.HomePort < ports && o.DestPort < ports), "ship port");
         Need(s.Contracts.All(c => In(c.From, ports) && In(c.To, ports)), "contract port");
     }
@@ -583,4 +593,10 @@ public sealed partial class World
 
     public static World LoadJson(string json) =>
         FromSave(JsonSerializer.Deserialize<SaveData>(json, JsonOptions) ?? throw new InvalidDataException("empty save"));
+
+    /// <summary>Copies a saved per-good array into the live one when it is no longer (an older save lacks the fish).</summary>
+    static void CopyGoods<T>(T[] from, T[] to)
+    {
+        if (from.Length is > 0 and <= Goods.Count) Array.Copy(from, to, from.Length);
+    }
 }

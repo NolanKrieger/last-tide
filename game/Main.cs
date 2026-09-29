@@ -27,6 +27,7 @@ public partial class Main : Node2D
     LifeView life = null!;
     WhirlpoolView whirlpools = null!;
     IceView ice = null!;
+    FishView fish = null!;
     FogView fog = null!;
     WakeView wake = null!;
     ShipView shipView = null!;
@@ -60,7 +61,7 @@ public partial class Main : Node2D
     bool aimPort, aimStarboard, firePortQueued, fireStarboardQueued, lanternQueued, spyglass, actionQueued;
     Vector2 mouse;
     public bool SpyglassHeld => spyglass;
-    int sailQueue, orderQueued;
+    int sailQueue;
     (Vec2 Pos, double Heading) prevPose, curPose;
     float zoomTarget = 1.25f;
     Vector2 camPos;
@@ -73,7 +74,7 @@ public partial class Main : Node2D
     int cartographerArg = -1;   // --cartographer[=tier]: a debug run starts with one aboard (--chart implies a green one)
     double skipSeconds;
     string? regionKey, monsterKey;
-    bool treasureAtStart, dockCove, deliverAtStart, hoverArg, showLogbook, pauseAtStart, debugHints, muteArg, soundArg;
+    bool treasureAtStart, dockCove, deliverAtStart, hoverArg, showLogbook, pauseAtStart, debugHints, muteArg, soundArg, broadsideArg, flotsamArg, fishArg;
     bool crewAtStart, optionsAtStart;   // --crew, --pause=options: review captures of the crew panel and Options over the pause menu
     HashSet<string> off = new();   // --off=fog,weather,sea,marks,fleet,effects,hud,wake,monsters,chart: perf bisection
     int fleetNear;                 // --fleet=N: N extra ships within 1.2 km of the player (the GDD §17 perf target)
@@ -154,7 +155,10 @@ public partial class Main : Node2D
                     && double.TryParse(xy[1], System.Globalization.CultureInfo.InvariantCulture, out double ay)) atArg = new Vec2(ax, ay);
             }
             else if (a == "--treasure") treasureAtStart = true;
+            else if (a == "--fish") fishArg = true;   // furled with a full crew and the lines out: fishing review
             else if (a == "--deliver") deliverAtStart = true;
+            else if (a == "--broadside") broadsideArg = true;
+            else if (a == "--flotsam") flotsamArg = true;
             else if (a == "--hover") hoverArg = true;
             else if (a == "--dock=cove") dockCove = true;
             else if (a == "--title") titlePage = "home";
@@ -289,6 +293,13 @@ public partial class Main : Node2D
             world.MonstersEnabled = true;
             world.SpawnMonster(mt);
         }
+        if (fishArg)
+        {
+            world.Ship.SailTarget = 0;
+            world.Ship.SailFraction = 0;
+            world.Ship.Crew = world.Ship.Hull.CrewMax;
+            world.Tick(new ShipInput(0, 0, Action: true));
+        }
         if (treasureAtStart)
         {
             var t = world.Map.Treasures.First(t => !t.Dug);
@@ -297,8 +308,6 @@ public partial class Main : Node2D
             world.Ship.Vel = Vec2.Zero;
             world.Ship.SailTarget = 0;
             world.Ship.SailFraction = 0;
-            var cove = world.Map.Ports.First(p => p.Secret);
-            world.Player.CoveHints.Add(new CoveHint { Port = cove.Id, X = cove.Harbor.X + 120, Y = cove.Harbor.Y - 90, Radius = 400 });
         }
         if (dockCove)
         {
@@ -340,6 +349,7 @@ public partial class Main : Node2D
             else world.Ship.HullHp = 0;
         }
         if (deliverAtStart) Deliver();
+        if (flotsamArg) world.SpawnDrift(new Rng((ulong)seed + 99));   // a barrel adrift ahead of her, for screenshots
         if (noticeArg != null) world.Notices.Enqueue(noticeArg);
         prevPose = curPose = (world.Ship.Pos, world.Ship.Heading);
         suspendEnabled = selfTest;
@@ -405,6 +415,9 @@ public partial class Main : Node2D
         ice = new IceView();
         ice.Init(world);
         AddChild(ice);
+        fish = new FishView();
+        fish.Init(world);
+        AddChild(fish);
         fog = new FogView();
         fog.Init(world.Reveal, world.Seed);
         sea.BindReveal(fog.SeaTexture);   // the charted mask with her live sight stamped in
@@ -489,7 +502,7 @@ public partial class Main : Node2D
     void FreeViews()
     {
         if (!viewsBuilt) return;
-        foreach (Node n in new Node[] { sea, chart, marks, life, fog, wake, fleet, shipView, effects, weather, monsters, camera, hud, shipCard, chartScreen, portScreen, crewPanel })
+        foreach (Node n in new Node[] { sea, chart, marks, life, whirlpools, ice, fish, fog, wake, fleet, shipView, effects, weather, monsters, camera, hud, shipCard, chartScreen, portScreen, crewPanel })
         {
             RemoveChild(n);
             n.QueueFree();
@@ -529,7 +542,7 @@ public partial class Main : Node2D
     {
         string K(string a) => Settings.Label(settings.KeyFor(a));
         return Text.Get("HUD_KEYS", K("SailUp"), K("SailDown"), K("Port"), K("Starboard"), K("FirePort"), K("FireStarboard"),
-            K("Order1"), K("Order4"), K("Crew"), K("Lantern"), K("Dock"), K("Chart"));
+            K("Crew"), K("Lantern"), K("Dock"), K("Chart"));
     }
 
     void BeginRun(World w)
@@ -563,6 +576,9 @@ public partial class Main : Node2D
         w.Player.ShipName = name;
         Array.Copy(loadout, w.Player.Loadout, Math.Min(loadout.Length, w.Player.Loadout.Length));
         BeginRun(w);
+        // She opens alongside the home quay on the ledger (Nolan, 2026-09-28): the board and the tavern are the first
+        // minute's work. The clock does not run in port.
+        TryDock();
     }
 
     public void ResumeVoyage()
@@ -689,7 +705,7 @@ public partial class Main : Node2D
     {
         portHeld = starboardHeld = aimPort = aimStarboard = spyglass = false;
         firePortQueued = fireStarboardQueued = lanternQueued = actionQueued = false;
-        sailQueue = orderQueued = 0;
+        sailQueue = 0;
     }
 
     /// <summary>While a screen is up nothing new starts, but a key let go is let go: the helm centres and an aimed broadside is stood down, not fired.</summary>
@@ -726,10 +742,10 @@ public partial class Main : Node2D
         var mouseWorld = Ink.M(GetCanvasTransform().AffineInverse() * mouse);
         // The glass is logged input (it inks the chart); its bearing is rounded so a steady glass is not a new entry every tick.
         double glassDir = spyglass ? Math.Round((mouseWorld - world.Ship.Pos).Angle, 2) : 0;
-        var input = new ShipInput(rudder, sailQueue, firePortQueued, fireStarboardQueued, orderQueued, lanternQueued, actionQueued, spyglass, glassDir);
+        if (broadsideArg && world.Ship.Loaded[1] && world.Ticks > 30) fireStarboardQueued = true;   // `--broadside`: hit-feedback review
+        var input = new ShipInput(rudder, sailQueue, firePortQueued, fireStarboardQueued, lanternQueued, actionQueued, spyglass, glassDir);
         actionQueued = false;
         sailQueue = 0;
-        orderQueued = 0;
         firePortQueued = fireStarboardQueued = lanternQueued = false;
         long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         long ticksBefore = world.Ticks;
@@ -753,6 +769,7 @@ public partial class Main : Node2D
         {
             effects.Consume();
             audio.Consume();
+            hud.Callouts.Consume(world);
             foreach (var ev in world.Events)
                 if (ev.ShipId == world.Ship.Id && ev.Type is CombatEventType.Hit or CombatEventType.Ram) shipView.Flash();
                 else if (ev.Type == CombatEventType.Ram && ev.Pos.DistanceTo(world.Ship.Pos) < world.Ship.Hull.Length * 2) shipView.Flash();
@@ -794,6 +811,7 @@ public partial class Main : Node2D
         shipView.SpyglassDir = world.SpyglassDir;
         shipView.SpyglassRange = world.SpyglassRange;
         shipView.SetPose(pos, heading);
+        fish.SetPose(pos, heading);
         fog.Sight(pos, world.VisionRadius);   // she sees round her now, charted or not
         fleet.Render(alpha);
         monsters.Alpha = alpha;
@@ -973,8 +991,6 @@ public partial class Main : Node2D
         {
             if (e is InputEventKey { Pressed: true, Echo: false } cpk && (settings.ActionOf(cpk.Keycode) == "Crew" || cpk.Keycode == Key.Escape))
                 crewPanel.Close();
-            else if (e is InputEventKey { Pressed: true, Echo: false } ok && settings.ActionOf(ok.Keycode) is "Order1" or "Order2" or "Order3" or "Order4")
-                crewPanel.PressOrder(settings.ActionOf(ok.Keycode)![5] - '1');
             return;
         }
         switch (e)
@@ -1011,9 +1027,6 @@ public partial class Main : Node2D
             case "FireStarboard":
                 if (key.Pressed) aimStarboard |= !paused;
                 else if (aimStarboard) { aimStarboard = false; fireStarboardQueued = !paused; }
-                break;
-            case "Order1": case "Order2": case "Order3": case "Order4":
-                if (key.Pressed && !paused) orderQueued = settings.ActionOf(key.Keycode)![5] - '0';
                 break;
             case "Lantern": if (key.Pressed && !paused) lanternQueued = true; break;
             case "Crew": if (key.Pressed && !paused) crewPanel.Toggle(); break;

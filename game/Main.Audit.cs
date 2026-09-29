@@ -257,6 +257,7 @@ public partial class Main
         title.Show("voyage");
         title.SetShipName(wideName);
         title.PressSetSail();
+        if (world.IsDocked) LeavePort();   // a new voyage opens in port: to sea, as before
         string sailedAs = world.Player.ShipName;
         bool seeded = World.CosmeticKeys.Where(k => k != "wake_indigo").All(world.Player.Cosmetics.Contains) && !world.Player.Cosmetics.Contains("wake_indigo");
         typeof(World).GetMethod("UnlockCosmetic", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(world, null);
@@ -377,7 +378,6 @@ public partial class Main
             foreach (var c in Cosmetics.Options(slot).Where(c => c.Length > 0)) { need.Add("COSMETIC_" + c); need.Add("NOTICE_COSMETIC_" + c); }
         }
         foreach (var pr in Enum.GetValues<Preset>()) { need.Add("PRESET_" + pr.ToString().ToUpperInvariant()); need.Add("PRESET_LINE_" + pr.ToString().ToUpperInvariant()); }
-        foreach (var o in Enum.GetValues<CrewOrder>()) need.Add("ORDER_" + o.ToString().ToUpperInvariant());
         foreach (var a in Settings.Actions) need.Add("ACT_" + a);
         var hintTable = (System.Collections.IEnumerable)typeof(Hints).GetField("Table", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
         foreach (var h in hintTable) need.Add("HINT_" + (string)h.GetType().GetProperty("Key")!.GetValue(h)!);

@@ -436,6 +436,140 @@ under Xvfb):
   self-tests sharing `user://selftest/` clobber each other's suspend save: run one at a time.
 - Before/after sheets: `scratch/hull-pass/` (all 14 hulls, the shipwright, a frigate's eight points of sail).
 
+## Welcome, delivery marks, flotsam adrift, hit feedback (2026-09-28)
+
+Nolan picked four items from an audit brainstorm: "add 1, 2, and also there should be floating barrels rarely, and also
+make clear hit feadback". Rules and numbers: GDD §3 and §19 ("Harbour master's welcome", "Delivery marks", "Flotsam
+adrift", "Hit feedback").
+
+- **Start in port** (`Main.StartVoyage`): a new voyage docks at home at once. A harbour master's welcome card came with it
+  and was removed the same day at Nolan's word (GDD §19 "Start in port"). *Removed the same day* ("get rid of the
+  welcome aboard card, its not needed"): a new voyage still opens docked at home, on the ledger; the self-test signs
+  the first job in the office instead.
+- **Delivery marks** (`EdgeMarkers`, kind 3): an ochre badge toward each port she owes, "Port · 2.1 km · due Day 5",
+  red under a day left, over the harbour once it is on screen. A harbour's or delivery's label is never dropped now.
+- **Flotsam adrift** (`src/Sim/World.Drift.cs`): 2% an in-game hour under way, a barrel ahead within sight, 150 s afloat,
+  a notice from the lookout; a pure function of seed and hour (nothing new saved). `DriftEnabled` (saved) is off in
+  `Sea.Fixed`. Off-screen flotsam in sight gets a brown edge badge (kind 4). `--flotsam` spawns one.
+- **Hit feedback** (`game/Callouts.cs`, `Hud`): `CombatEvent.By` / `.Good`; figures where balls strike (black hers, red
+  taken, merged per broadside), "Leak!", "Sunk!", "+3 Rum"; a draining hull bar over struck ships; the HUD hull tube
+  flashes and holds the lost planks; her own hits heard at any range. `--broadside` fires the starboard battery.
+
+Evidence (2026-09-28; the tree also held another session's map generator v7 work in progress):
+- `dotnet build`: 0 errors, 0 warnings.
+- `dotnet test`: the 7 new `DriftTests` pass (rate, placement ahead/in sight/clear of land, pickup event, hove to and
+  the switch, replay + save, hit `By` and pickup `Good`). Whole suite without the 1000-seed sweep: 264 pass, 9 fail; the
+  same 9 fail with drift off and with all of this work's sim changes stripped out (map v7: ice, mangroves, lagoons,
+  chart inking, hunters, wearing round, director card, autopilot ×2).
+- `--selftest` (Xvfb, private copy): **PASS, 236 ok**. New checks through the real input path: Set sail docks at home
+  with the welcome up and Agreed focused; Esc closes it signing nothing; Agreed (clicked) signs the job and the
+  cartographer and opens the office; Esc casts off and an edge mark names the delivery port and its day; her hit pops a
+  figure and brings up the target's hull bar; a hit she takes pops a red figure and the tube holds the lost planks; an
+  off-screen barrel gets a mark and hauling it aboard says "+2 Rum"; "I'll find my own way" (clicked) signs nothing.
+- `--playtest=3,2 --seed=21`: **PASS**, 0 errors, 0 warnings (both voyages start docked on the welcome through the
+  title's Set sail; the autopilot trades and casts off from it).
+- Screenshots reviewed: the welcome card, a delivery mark at the rim, a barrel's mark, a sparring exchange (red figure,
+  "Leak!", the tube's pale chunk, the enemy's hull bar).
+- Not run: a balance batch (barrels add a little cargo; the autopilot neither seeks nor avoids them).
+
+## World v7: islands farther apart, chart monsters round the frame (2026-09-28)
+
+Nolan: "make the distance between the islands bigger and subsequently the size of the map bigger, also the images of
+sea monsters on the map should be smaller and there should be six of them evenly spread out around the edge of the
+map, for some reason right now the three sea monsters are on the top left of the map." Numbers: GDD §5 and §19
+("Islands farther apart, generator v7", "Chart monsters round the border").
+
+- **Generator v7** (`Map.Stretch` = 1.4): the chart is 25.2 × 18.9 km; region seeds, border warp and blend, island
+  groups, every region's channel, the edge margin and the Maelstrom/Sargasso search boxes stretch with it, land shares
+  are divided by 1.4² and landforms keep their sizes. Map-scale rules stretch too: `StartRouteRange` 840 m,
+  `LuxuryDistance` 4.2 km, `World.MerchantRun` 3.1 km (was a bare 2 200), `LaneReach` 5 km, contract offers
+  490 m–3.9 km, the autopilot's starving-port and revisit searches. v6 suspend saves are refused.
+- **Chart monsters** (`ChartMap.PlaceMonsters`, `MonsterSlots`): six, drawn on the frame at equal steps round a ring
+  inside the neatline, 11% of its height, the right-hand ones facing inward. The old placer picked the three blank
+  cells farthest from the sheet's edge that fitted the opening view, so they bunched in one uncharted corner. The
+  printed roses' clearances and sizes stretch with the sheet.
+- **Fixes the new geometry exposed:** drift ice now needs its floe's own patch in the Ice Reach, not just its cell's
+  centre (`Ice.Near`), so a floe strays over a border by its orbit at most; the autopilot no longer flees a crocodile
+  basking more than 150 m from its perch (it watches her for as long as she is in the Mangrove, and seed 12 spent
+  7.5 of 8 days fleeing one).
+- **Tests updated for the stretched sea:** the Mangrove approach search (×Stretch), harbour shelter against points
+  off the same coasts (the absolute 0.5 was v6's; harbours still beat the coast by 0.03–0.06 on both versions),
+  chart inking starts at the charted edge, the hunter test fights in open Trade Isles water, the spent-harbour rescue
+  test knows only its two harbours, the director's blind-spawn test sees ×Stretch, and the wear-round test takes
+  1 km of clear water (its old pick lay 950 m off a coast, inside the faster flee's look-ahead).
+
+Evidence (2026-09-28): full `dotnet test` on the shared tree **274/274** (9 m 41 s, the thousand-seed sweep included);
+the game assembly builds. In a private copy (HEAD + the 10%-faster ships + this work, own user dir): the formerly
+failing tests and the ice/autopilot suites pass, `--selftest` **PASS** (226 checks). Maps over 12 seeds, v6 → v7:
+nearest island of another landform 201 → 338 m (median), nearest harbour 581 → 684 m, islands 983 → 1,083, land
+22 → 28 km² (the Mangrove, Maelstrom, Trade Isles and Fog Banks now reach the land share v6 had no room for), ports
+145 → 147. 200 maps in parallel took 55 s (v6 70 s, same load). Populated sea (seed 3, 129 ships): 0.5–1.2 ms a tick
+on both versions; merchant arrivals in the first 4 min 18 → 7. Autopilot, Calm, 8 days, seeds 11–16: mean visits
+6.7 → 5.5. Screenshots reviewed: the chart on a fresh voyage (six monsters round the frame, the right-hand three
+facing in) and fully revealed (seed 7). Not done: a balance batch (`scratch/balance` is not on the laptop; voyages
+are longer, so GDD §11 day targets need re-checking), and FPS on the desktop GPU (the reveal mask, fog textures and
+coast SDF are each ~2× larger: 2016 × 1512 and 3150 × 2362 texels).
+
+## No crew orders: the crew is set by hand (2026-09-28)
+
+Nolan: "get rid of the switching stuff with 1234 because you should just have to click c and manually switch the
+crew." Rules: GDD §7 "Crew by hand" and §19 "No crew orders".
+
+- **Sim:** `ShipInput.Order` and `PortAction.CrewOrder` are gone; `Ship.SplitFor(order)` gives any order's split
+  (AI captains still sail by orders) and `Ship.RepairHands` the carpenters wanted. `World.ManNewHands`: hands hired
+  onto a crew set by hand fill places still wanting hands (sails, guns, repair) before any stand spare. The autopilot
+  sets its hands with `World.CrewStationsCommand`, as a player does on the panel.
+- **Game:** the Order1–4 actions are out of `Settings` (a saved settings file drops them on load), Options, the key
+  legend and `HUD_KEYS`; the crew panel has no order buttons (focus opens on its first live − / +); the HUD crew strip
+  reads "Stations" with the C key cap; the last stand's patch prompt and the leak hint point at C. The playtest driver
+  no longer taps order keys. Strings removed: `ORDER_*`, `ORDER_NAME_*`, `ACT_Order1–4`, `HUD_LEGEND_ORDERS`,
+  `HUD_ORDER`; added `HUD_CREW_STATIONS`.
+- **Tests:** `CrewOrdersSplitTheHands` (orders set directly, as for AI ships), new `HandsSignedOnGoWhereHandsAreWanted`,
+  the reload and replay tests set stations through the crew command.
+
+Evidence (2026-09-28, a snapshot of the shared tree with its own user dir): `dotnet test` 276/277, the one failure
+`ThePopulatedSeaTradesAndKeepsItsBudget` (10.6 ms a tick while the self-test and screenshots rendered on the same
+CPU), which passes run alone. `--selftest` **PASS** (235): the crew starts balanced; 1 and 3 change nothing at sea
+or on the open panel; − stands a gunner down to spare (4,2,1,0 → 3,2,1,1) and the drawn sailors follow; + puts him
+back; GC-29 finds every string. Screenshots reviewed: the HUD at sea (crew strip, key legend) and the crew panel
+(`--crew`).
+
+## Fishing (2026-09-28)
+
+Nolan: "I should be able to fish in this game", then "you should be able to fish anywhere but some places have more
+fish" and "the fishing grounds should be very subtle". Rules and numbers: GDD §10 "Fishing", §6 goods, §19 "Fishing".
+
+- **Sim:** `Good.Fish` (good 28, `GoodGroup.Catch`, appended so older per-good arrays keep their places; saves from
+  before load with the arrays padded). `Fishing` (grounds and richness, a pure function of seed, place and day like
+  the ice) and `World.Fishing` (lines out on the context key away from a dig or wreck, at most `MaxLines` hands of the
+  gun crews and spare bench fishing, catch into the hold as `Collect` events, hold-full / make-sail / no-hands haul-ins,
+  pearls, ambergris, bottle maps and hooked beasts, `SpoilFish`). Midnight eats fish before provisions. Markets buy
+  fish with no generator draw (maps unchanged); `Buy` refuses it; `AssignGoods` and the autopilot skip it.
+- **Game:** `FishView` (faint rise rings and a rare jumping fish within ~420 m of her; lines to bobbing floats while
+  fishing), the context prompt ("Put out lines" / "Lines out · N hands fishing · haul in", never the richness), HUD food
+  "provisions+fish", a small splash and a few drops for each fish instead of coins, the port ledger lists fish only
+  while she holds some, a `first_fish` hint, `--fish` debug flag. Fish icon (Codex) in goods atlas cell 27, logged in
+  AI-ASSETS. `Main.FreeViews` now also frees the whirlpool and ice views, which leaked into the next voyage.
+- **Near land (Nolan, same day):** the run rises to 1.8× at the water's edge (`Fishing.Inshore`, via the shared
+  `Shore` distance) and grounds gather by the coasts (65% of a cell's days by a shore, 20% out in open water).
+- **Tests:** `FishingTests` (10): fish gather near land (run at the edge, grounds per km² inshore vs offshore), grounds pure and daily, richness everywhere ≥ the region's run, lines only under ⅓
+  sail and hauled in on making sail, catch = the water's rate over the stretch (night lantern included), lines capped,
+  hold full, fish eaten first and a third spoiling, ports buy but don't sell, a hooked serpent and a Shoals pearl,
+  save/load mid-catch replays exactly.
+- **Knock-ons fixed:** the market draws no noise for fish (the world's dice run exactly as before fishing);
+  `GoodsMeetTheGlobalConstraints` skips the catch; `AStormGathersAndBlowsOutGradually` caps the storm's one-tick jump
+  relative to its share (a cell that trebles the wind moved 0.126 absolute on seed 5, 4% of the share; blowing out all
+  at once was ~44%); `TradesFromTheLeanStart` needs every voyage to make port and 5 of 6 to make two (seed 7 flees
+  Brethren sloops for a third of its four days).
+
+Evidence (2026-09-28, a snapshot of the shared tree with its own user dir): `dotnet test` **291/291** (13 m, the
+thousand-seed sweep included). `--selftest` **PASS** (238): the prompt offers lines lying still at sea, F puts them
+out ("6 hands fishing"), a fish comes over the rail with "+1 Fish", F hauls in, making sail hauls in. Screenshots
+reviewed: lines out over a Corsair Keys ground (before the rates were lowered: 7 hands at 4.5× landed ~38 a minute,
+too rich) and over a Trade Isles ground 61 m off a beach at the final rates (faint rise rings, one small jumping fish,
+"6+5 fish" on the HUD). Not done: a balance batch (the harness is not on the laptop); best case now ~17 fish a minute
+(6 lines in the richest inshore ground), an ordinary sea ~1.5.
+
 ## Next
 - Balance on the v6 world: the chart is 3× each way and ports ½–1 day apart, so re-run the autopilot batches for all
   three presets before tuning anything (GDD §11 day targets, upkeep, provisions, Threat per day).
@@ -466,6 +600,8 @@ under Xvfb):
 - Steam: Steamworks account/App ID/fee, the price point, store assets (`docs/STEAM.md`).
 
 ## Bug list
+- (fixed 2026-09-28) A Maelstrom whirlpool lay over an island (they were sized to ¾ of the narrows' width); outer whirlpools overlapped each other. Whirlpools now keep 120 m of water to any shore and never overlap anything; floes and the deep-water beasts thin toward land (GDD §19 "Whirlpools clear of everything"). Tests: `WhirlpoolTests` (4). Whirlpool placement moved every port downstream of it on each seed, so two seed-pinned tests now choose their chart (`TheAutopilotRunsForAHarbourThatWillStillTakeHerIn`: the first seed ≥ 9 with two harbours in sight, a beam wind pinned) or sample more of them (`TradesFromTheLeanStart`: 6 seeds, 4 must trade; seeds 7 and 11 now sell nothing in four days on the stretched chart, a lean sloop fleeing a pirate for three days between two ports). Suite 288/290 without the sweep; the two failures (goods constraints, a storm test) fail identically without this change (fishing work in progress). `--selftest` PASS, 235 ok. Screenshots: a Maelstrom whirlpool in open water; the Ice Reach's floes out in the bay.
+- (fixed 2026-09-28) Big hulls sailed over small floes and shot flew through drift ice (Nolan: "why can i drive over and shoot through icebergs"); GDD §19 "Drift ice is solid". Tests: `IceTests.ABigHullCannotSailOverASmallFloe` (fails on the old three-circle hull: 1.4 m left inside a floe), `IceTests.ShotStopsAtDriftIceAndCaptainsHoldFireThroughIt`.
 - (open, minor) The Options "UI scale" scales the whole window, sea included, not only the interface (hud R-03).
 - (fixed 2026-09-26) 178 fixes from the audit — `docs/audit/SUMMARY.md` and the per-area reports.
 - (fixed 2026-09-26, hardened) The unreproduced spontaneous pause / flaky self-test cascade: the self-test now tags its

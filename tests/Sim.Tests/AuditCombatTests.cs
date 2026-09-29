@@ -113,7 +113,8 @@ public class AuditCombatTests
         // the eye of the wind. Baseline: she took it, stalled in irons and was still wallowing twelve seconds later.
         var w = Quiet(4);
         double north = Angles.FromCompassDeg(0);
-        var m = OpenWater(w, ok: c => Angles.Deg(Math.Abs(Angles.Wrap(c.Angle - north))) is >= 45 and <= 65);
+        // Clear of land well past her escape's look-ahead, so the test is of the turn and not of a coast in the way.
+        var m = OpenWater(w, clear: 1000, ok: c => Angles.Deg(Math.Abs(Angles.Wrap(c.Angle - north))) is >= 45 and <= 65);
         var raiderAt = m + m.Normalized * 300;
         w.Ship.Pos = m + new Vec2(0, 900);
         w.Ship.Vel = Vec2.Zero;
@@ -396,7 +397,7 @@ public class AuditCombatTests
     {
         // Baseline: when no sea point was found beyond her sight, the card's cost was already spent and nothing came.
         var w = Quiet(5, preset: Preset.Tempest);
-        w.VisionMult = 100;   // sight past the chart's edge: nowhere beyond it to put a hunter
+        w.VisionMult = 100 * Map.Stretch;   // sight past the chart's edge: nowhere beyond it to put a hunter
         w.DirectorEnabled = true;
         w.Tick(default);
         w.Director.Credits = 100;
@@ -641,14 +642,29 @@ public class AuditCombatTests
     [Fact]
     public void TheAutopilotRunsForAHarbourThatWillStillTakeHerIn()
     {
-        var w = World.NewRun(9, populate: false);
+        // The first chart from seed 9 whose home harbour has another open one in plain sight across open water within
+        // 1.7 km (the choice is under test, not the pathfinding round a headland, nor one chart's layout: 2026-09-28 the
+        // whirlpools' new placement moved every port downstream of it).
+        World w = null!;
+        Port spent = null!, other = null!;
+        for (int seed = 9; ; seed++)
+        {
+            w = World.NewRun(seed, populate: false);
+            spent = w.Map.StartPort;
+            var home = spent;
+            var near = w.Map.Ports.Where(p => p != home && !p.Secret && w.IsOpen(p) && w.Map.Nav.SegmentClear(home.Harbor, p.Harbor))
+                .OrderBy(p => p.Harbor.DistanceTo(home.Harbor)).FirstOrDefault();
+            if (near != null && near.Harbor.DistanceTo(spent.Harbor) < 1700) { other = near; break; }
+            Assert.True(seed < 60, "no chart with two harbours in sight of each other");
+        }
         w.DirectorEnabled = false;
         w.MonstersEnabled = false;
-        var spent = w.Map.StartPort;
-        // The nearest open harbour in plain sight across open water (the choice is under test, not the pathfinding round
-        // a headland: on the landform charts a big island's next port can lie round its point).
-        var other = w.Map.Ports.Where(p => p != spent && !p.Secret && w.IsOpen(p) && w.Map.Nav.SegmentClear(spent.Harbor, p.Harbor))
-            .OrderBy(p => p.Harbor.DistanceTo(spent.Harbor)).First();
+        // The wind across the line between them, so either is a reach: the choice is under test, not a beat to windward
+        // from a standstill at half speed (on seed 10 the unspent harbour lies dead upwind).
+        w.Wind.SetFixed(Angles.Wrap((other.Harbor - spent.Harbor).Angle + Math.PI / 2), 8);
+        // Only these two are known, so the choice lies between them (with others charted, the nearest unspent one may lie
+        // beyond the spent harbour, and her way there past it).
+        foreach (var p in w.Map.Ports) p.Discovered = false;
         spent.Discovered = other.Discovered = true;
         w.RescuedAt.Add(spent.Id);
         // Foundering between the two, nearer the spent one.
@@ -664,8 +680,7 @@ public class AuditCombatTests
         Assert.True(dOther < 1200, $"the other harbour is {dOther:0} m off");
         for (int i = 0; i < 30 * 25; i++) w.Tick(a.Tick(w));
         Assert.Equal(Autopilot.Mode.Rescue, a.State);
-        // She turns away from the harbour that has used its mercy, toward one that hasn't (on the 145-port chart the
-        // nearest such may be another than `other`).
+        // She turns away from the harbour that has used its mercy, toward the one that hasn't.
         Assert.True(w.Ship.Pos.DistanceTo(spent.Harbor) > dSpent + 10, $"she should leave the spent harbour for one that has not used its mercy ({dSpent:0} → {w.Ship.Pos.DistanceTo(spent.Harbor):0} m from it)");
     }
 
@@ -934,7 +949,8 @@ public class AuditCombatTests
         Assert.Equal(24, w.Ship.ReloadTime, 6);
         w.Tick(new ShipInput(0, 0, FireStarboard: true));
         Assert.False(w.Ship.Loaded[(int)Side.Starboard]);
-        w.Tick(new ShipInput(0, 0, Order: 1));   // battle stations: all four guns manned
+        w.Apply(World.CrewStationsCommand(guns: 4, sails: 0, repair: 0));   // all four guns manned by hand
+        w.Tick(new ShipInput(0, 0));
         Assert.Equal(12, w.Ship.ReloadTime, 6);
         Run(w, 12.2);
         Assert.True(w.Ship.Loaded[(int)Side.Starboard], "fully manned, the reload finishes in 12 s");

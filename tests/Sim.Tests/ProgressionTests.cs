@@ -178,8 +178,31 @@ public class ProgressionTests
         Sea.Run(w, 90);
         Assert.True(w.Ship.ForwardSpeed > shortHanded * 1.05, $"{shortHanded:F2} → {w.Ship.ForwardSpeed:F2}");
         Assert.Equal(Tuning.SloopTopSpeed, w.Ship.ForwardSpeed, 1);
-        w.Tick(new ShipInput(0, 0, Order: 1));
-        Assert.Equal(CrewOrder.Battle, w.Ship.Order);
+    }
+
+    [Fact]
+    public void HandsSignedOnGoWhereHandsAreWanted()
+    {
+        // With no order keys to rebalance (Nolan, 2026-09-28), hands hired onto a crew set by hand must not stand spare
+        // while a station wants them: sails first, then guns, then repair, and only the rest spare.
+        var w = Docked(seed: 6);
+        var ship = w.Ship;
+        ship.Cannons = 2;
+        ship.Crew = 3;
+        w.SetStations(guns: 2, sails: 1, repair: 0);
+        Assert.Equal(new[] { 2, 1, 0, 0 }, ship.Stations());
+        int riggers = ship.Hull.Riggers, wanted = riggers - 1 + ship.RepairHands;
+        Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.Hire, Amount: wanted + 1)));
+        Assert.Equal(CrewOrder.Custom, ship.Order);
+        Assert.Equal(new[] { 2, riggers, ship.RepairHands, 1 }, ship.Stations());
+        // A hand lost and replaced goes back to the place it left.
+        ship.Crew -= 2;
+        Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.Hire, Amount: 2)));
+        Assert.Equal(new[] { 2, riggers, ship.RepairHands, 1 }, ship.Stations());
+        // On the balanced split nothing is written: the split takes them in.
+        var b = Docked(seed: 6);
+        Assert.Equal(PortResult.Ok, b.Apply(new PortCommand(PortAction.Hire, Amount: 1)));
+        Assert.Equal(CrewOrder.Balanced, b.Ship.Order);
     }
 
     [Fact]

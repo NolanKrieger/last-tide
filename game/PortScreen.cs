@@ -38,6 +38,7 @@ public partial class PortScreen : CanvasLayer
     Label[] elsewhere = Array.Empty<Label>();
     Label detailRole = null!;
     Label detailName = null!, detailGroup = null!, detailBuy = null!, detailSell = null!, detailStock = null!, detailHeld = null!, detailHint = null!, detailQty = null!;
+    Label detailWanted = null!;
     UiGauge detailStockGauge = null!;
     PanelContainer detail = null!;
     Label marketHint = null!;
@@ -57,13 +58,14 @@ public partial class PortScreen : CanvasLayer
     readonly List<(PanelContainer Card, Label Name, Label Effect, Button Buy)> blackRows = new();
     readonly List<(HullDef Hull, PanelContainer Card, Label Name, Button Buy)> hullRows = new();
     // Tavern
-    Label crewTavern = null!, rumorLine = null!, mapLine = null!, officerHead = null!, heardHead = null!;
-    Label[] heard = Array.Empty<Label>();
+    Label crewTavern = null!, mapLine = null!, officerHead = null!;
     UiFigures figures = null!;
-    Button hire1 = null!, hire5 = null!, rumor = null!, buyMap = null!;
+    Button hire1 = null!, hire5 = null!, buyMap = null!;
     readonly List<(OfficerType Type, Label Name, UiPips Tier, Label Effect, Label Terms, Label Aboard, Button Hire, Button Dismiss)> officerRows = new();
-    bool rumorThisVisit;
     // Harbour office
+    Label wantedNone = null!;
+    Label[] wantedLines = Array.Empty<Label>();
+    List<World.WantedNotice> wanted = new();
     Label boardEmpty = null!, heldHead = null!, heldNone = null!, bountyLine = null!, arrivalLine = null!;
     PanelContainer arrivalCard = null!;
     Label[] receiptLines = Array.Empty<Label>();
@@ -79,7 +81,6 @@ public partial class PortScreen : CanvasLayer
     public Button SellButton => sell;
     public LedgerTable Ledger => ledger;
     public Button[] Tabs => tabs;
-    public string RumourText => rumorLine.Text;
     public string BuyText => buy.Text;
     public string CannonOffer => buyCannon.Text;
     public string HullOffer(string id) => hullRows.First(h => h.Hull.Id == id).Buy.Text;
@@ -90,6 +91,9 @@ public partial class PortScreen : CanvasLayer
     /// <summary>The tavern's Hire button for an officer type (the self-test clicks the cartographer's).</summary>
     public Button OfficerHireButton(OfficerType type) => officerRows.First(r => r.Type == type).Hire;
     public Button MoreButton = null!, MaxButton = null!;
+    /// <summary>The office's "wanted nearby" lines as shown (the self-test compares them with the sim's board).</summary>
+    public IEnumerable<string> WantedShown => wantedLines.Where(l => l.Visible).Select(l => l.Text);
+    public bool WantedNoneShown => built && wantedNone.Visible;
 
     public void Init(World w, Font f)
     {
@@ -345,6 +349,10 @@ public partial class PortScreen : CanvasLayer
             elsewhere[i].TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
             info.AddChild(elsewhere[i]);
         }
+        detailWanted = Parchment.L("", "Flavour");
+        detailWanted.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        detailWanted.AddThemeColorOverride("font_color", Ink.Wind);
+        info.AddChild(detailWanted);
         detailHint = Parchment.L("", "Flavour");
         detailHint.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         detailHint.CustomMinimumSize = new Vector2(300, 0);
@@ -566,25 +574,6 @@ public partial class PortScreen : CanvasLayer
         hr.AddChild(hire1);
         hr.AddChild(hire5);
 
-        var talk = Card(left, Art.Tex("people/keeper"), 72, 90, out var tt);
-        tt.AddChild(Parchment.L(Text.Get("PORT_RUMOURS"), "Head"));
-        rumorLine = Parchment.L("", "Flavour");
-        rumorLine.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        rumorLine.CustomMinimumSize = new Vector2(300, 0);
-        tt.AddChild(rumorLine);
-        rumor = Parchment.B(Text.Get("PORT_RUMOR", World.RumorPrice), () => { if (Do(new PortCommand(PortAction.Rumor)) == PortResult.Ok) { rumorThisVisit = true; Refresh(); } });
-        rumor.SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin;
-        tt.AddChild(rumor);
-        heardHead = Parchment.L(Text.Get("PORT_RUMOURS_HEARD"), "Caption");
-        tt.AddChild(heardHead);
-        heard = new Label[4];
-        for (int i = 0; i < heard.Length; i++)
-        {
-            heard[i] = Parchment.L("", "Flavour");
-            heard[i].TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
-            tt.AddChild(heard[i]);
-        }
-
         var map = Card(left, Parchment.Tex("icon-bottle"), 64, 72, out var mt);
         mt.AddChild(Parchment.L(Text.Get("PORT_MAP_HEAD"), "Head"));
         mapLine = Parchment.L("", "Flavour");
@@ -729,6 +718,24 @@ public partial class PortScreen : CanvasLayer
         bountyLine.CustomMinimumSize = new Vector2(240, 0);
         bt.AddChild(bountyLine);
 
+        // What the ports nearby want (Nolan, 2026-09-28): the harbour master's words, never a price.
+        Card(right, Parchment.Tex("icon-map"), 48, 48, out var wt);
+        wt.AddChild(Parchment.L(Text.Get("PORT_WANTED_HEAD"), "Head"));
+        var wnote = Parchment.L(Text.Get("PORT_WANTED_NOTE"), "Caption");
+        wnote.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        wnote.CustomMinimumSize = new Vector2(260, 0);
+        wt.AddChild(wnote);
+        wantedLines = new Label[World.WantedShown];
+        for (int i = 0; i < wantedLines.Length; i++)
+        {
+            wantedLines[i] = Parchment.L("", "Data");
+            wantedLines[i].AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            wantedLines[i].CustomMinimumSize = new Vector2(260, 0);
+            wt.AddChild(wantedLines[i]);
+        }
+        wantedNone = Parchment.L(Text.Get("PORT_WANTED_NONE"), "Flavour");
+        wt.AddChild(wantedNone);
+
         arrivalCard = Card(right, Parchment.Tex("icon-gold"), 48, 40, out var at);
         at.AddChild(Parchment.L(Text.Get("PORT_ARRIVAL_HEAD"), "Head"));
         receiptLines = new Label[5];
@@ -752,6 +759,21 @@ public partial class PortScreen : CanvasLayer
         "RECEIPT_CAUGHT" => Text.Get(r.Key, -r.Gold),
         _ => Text.Get(r.Key, r.Gold),
     };
+
+    /// <summary>"Sugar badly wanted at Port Elmore (Storm Reach) · about 1.5 days' sail": words, never a price.</summary>
+    string WantedLine(World.WantedNotice n)
+    {
+        var p = world.Map.Ports[n.Port];
+        string where = Text.Get("PORT_WANTED_AT", p.Name, Text.Get("REGION_" + RegionDef.Of(p.Region).Key));
+        return Text.Get(n.Badly ? "PORT_WANTED_BADLY" : "PORT_WANTED_LINE", Text.Get("GOOD_" + Goods.Of(n.Good).Key), where, Sail(n.Days));
+    }
+
+    /// <summary>"a day's sail", "2.5 days' sail": to the half day, at least half a day.</summary>
+    static string Sail(double days)
+    {
+        double d = Math.Max(0.5, Math.Round(days * 2) / 2);
+        return d == 1 ? Text.Get("PORT_SAIL_1") : Text.Get("PORT_SAIL_N", Parchment.N(d, "0.#"));
+    }
 
     void RefreshOffice(Port port)
     {
@@ -781,6 +803,12 @@ public partial class PortScreen : CanvasLayer
             sign.Disabled = full || !room;
         }
         boardEmpty.Visible = !any;
+        for (int i = 0; i < wantedLines.Length; i++)
+        {
+            wantedLines[i].Visible = i < wanted.Count;
+            if (i < wanted.Count) wantedLines[i].Text = WantedLine(wanted[i]);
+        }
+        wantedNone.Visible = wanted.Count == 0;
         heldHead.Text = Text.Get("PORT_OFFICE_HELD", player.Contracts.Count, World.MaxContracts);
         for (int i = 0; i < contractRows.Count; i++)
         {
@@ -839,7 +867,6 @@ public partial class PortScreen : CanvasLayer
         Visible = true;
         Layout();
         message.Text = "";
-        rumorThisVisit = false;
         var port = world.Docked;
         sheet.Aged = port is { Secret: true };
         // At a cove the ledger opens on the first rarity it deals in (they head the list); elsewhere on provisions.
@@ -966,6 +993,7 @@ public partial class PortScreen : CanvasLayer
         var ship = world.Ship;
 
         tabsHint.Text = Text.Get("PORT_TABS_HINT");   // key names follow the bindings
+        wanted = world.WantedNotices(port);   // the office's board, read by the office page and the market's detail
 
         // Header: who owns the port and how they regard her.
         title.Title = port.Name;
@@ -998,6 +1026,7 @@ public partial class PortScreen : CanvasLayer
         {
             int held = player.Units(g.Id);
             if (Goods.IsRare(g.Id) && !port.Secret && held == 0) continue;   // rare goods trade only at coves
+            if (!Goods.IsTraded(g.Id) && held == 0) continue;   // the catch: only while she has some to sell
             int trend = 2;
             if (port.PricesLastVisit is { } last && last[(int)g.Id] is { } prev)
             {
@@ -1073,7 +1102,6 @@ public partial class PortScreen : CanvasLayer
         hire5.Text = Text.Get("PORT_HIRE", five, World.SigningFee * five);
         hire5.Visible = five > 1;
         hire5.Disabled = berths == 0 || player.Gold < World.SigningFee * five;
-        rumor.Disabled = player.Gold < World.RumorPrice;
         var site = world.TavernMap(port);
         if (site == null)
         {
@@ -1104,34 +1132,14 @@ public partial class PortScreen : CanvasLayer
                 || (mine == null && Officers.UsesSlot(type) && player.SlottedOfficers >= ship.Hull.OfficerSlots);   // the cartographer berths apart
             dismiss.Disabled = mine == null;
         }
-        // Rumours: only what this tavern said on this visit (the sim keeps the last one heard anywhere).
-        if (rumorThisVisit && world.LastRumorWasCove)
-            rumorLine.Text = Text.Get("PORT_RUMOR_COVE");
-        else if (rumorThisVisit && world.LastRumor is { } r)
-        {
-            var rp = world.Map.Ports[r.Port];
-            var entry = player.Remembered(r.Port, r.Good);
-            rumorLine.Text = entry == null ? "" : Text.Get("PORT_RUMOR_LINE", rp.Name, Text.Get("GOOD_" + Goods.Of(r.Good).Key), Math.Round(entry.Price), Math.Floor(entry.Day) + 1,
-                Text.Get("REGION_" + RegionDef.Of(rp.Region).Key));
-        }
-        else rumorLine.Text = Text.Get("PORT_RUMOR_NONE");
-        // Every rumour still in her ledger, newest first: the tavern's talk is only worth something if she can find it again.
-        var rumours = player.Ledger.Where(e => e.Rumor).OrderByDescending(e => e.Day).Take(heard.Length).ToList();
-        heardHead.Visible = rumours.Count > 0;
-        for (int i = 0; i < heard.Length; i++)
-        {
-            heard[i].Visible = i < rumours.Count;
-            if (i >= rumours.Count) continue;
-            var e = rumours[i];
-            heard[i].Text = Text.Get("PORT_RUMOUR_HEARD", world.Map.Ports[e.Port].Name, Text.Get("GOOD_" + Goods.Of(e.Good).Key), Math.Round(e.Price), Math.Floor(e.Day) + 1);
-        }
 
         RefreshOffice(port);
     }
 
     /// <summary>
     /// The ledger's last column: for goods in the hold, the margin per unit against what she paid; otherwise the best
-    /// price remembered elsewhere when it beats buying here (the player's own ledger and rumours, never hidden state).
+    /// price remembered elsewhere when it beats buying here (her own ledger: prices seen in port or heard from a merchant
+    /// who traded there, never hidden state).
     /// </summary>
     (string, Color) Note(Port port, Good g, int held)
     {
@@ -1167,6 +1175,7 @@ public partial class PortScreen : CanvasLayer
         int canBuy = (int)Math.Floor(room + 1e-9);
         canBuy = Math.Min(canBuy, (int)Math.Floor(m.Stock[(int)selected]));
         if (Goods.IsRare(selected) && !port.Secret) canBuy = 0;
+        if (!Goods.IsTraded(selected)) canBuy = 0;   // ports buy fish, they don't sell it
         // The largest n she can pay for (cost rises with n: binary search, each quote priced unit by unit).
         int lo = 0, hi = Math.Max(0, canBuy);
         while (lo < hi)
@@ -1194,16 +1203,21 @@ public partial class PortScreen : CanvasLayer
             ? Text.Get("PORT_HELD_PAID", held, Math.Round(player.CostBasis[(int)selected] / held))
             : Text.Get("PORT_HELD_ONLY", held);
         detailRole.Text = port.Produces_(selected) ? Text.Get("PORT_ROLE_MAKES") : port.Consumes_(selected) ? Text.Get("PORT_ROLE_WANTS") : Text.Get("PORT_ROLE_NEITHER");
-        // The best prices she has on record elsewhere (her own ledger and rumours), dearest first.
+        // The best prices she has on record elsewhere (seen in port, or heard from a merchant hailed at sea), dearest first.
         var known = player.Ledger.Where(e => e.Good == selected && e.Port != port.Id).OrderByDescending(e => e.Price).Take(elsewhere.Length).ToList();
         for (int i = 0; i < elsewhere.Length; i++)
         {
             elsewhere[i].Visible = i < known.Count;
             if (i >= known.Count) continue;
             var e = known[i];
-            elsewhere[i].Text = Text.Get(e.Rumor ? "PORT_KNOWN_RUMOUR" : "PORT_KNOWN_SEEN", world.Map.Ports[e.Port].Name, Math.Round(e.Price * Market.Spread), Math.Floor(e.Day) + 1);
+            elsewhere[i].Text = e.Heard ? Text.Get("PORT_KNOWN_HEARD", world.Map.Ports[e.Port].Name, Math.Round(e.Price * Market.Spread), Math.Floor(e.Day) + 1, e.Teller)
+                : Text.Get("PORT_KNOWN_SEEN", world.Map.Ports[e.Port].Name, Math.Round(e.Price * Market.Spread), Math.Floor(e.Day) + 1);
             elsewhere[i].AddThemeColorOverride("font_color", Math.Round(e.Price * Market.Spread) > UnitBuy(port, selected) ? Ink.Black : Parchment.Muted);
         }
+        var posted = wanted.Where(n => n.Good == selected).ToList();
+        detailWanted.Visible = posted.Count > 0;
+        if (posted.Count > 0)
+            detailWanted.Text = string.Join("\n", posted.Select(n => Text.Get("PORT_WANTED_HERE", world.Map.Ports[n.Port].Name, Sail(n.Days))));
         detailHint.Visible = known.Count == 0;
         detailHint.Text = Text.Get("PORT_HINT_NONE");
         detailQty.Text = "×" + n;

@@ -286,23 +286,22 @@ public class CombatTests
     }
 
     [Fact]
-    public void CrewOrdersReassignTheHands()
+    public void CrewOrdersSplitTheHands()
     {
+        // AI captains sail by the orders; the player sets hands by hand in the crew panel (no order keys since 2026-09-28).
         var w = Sea.Fixed();
         var ship = w.Ship;
         ship.Crew = 10;
         ship.Cannons = 4;
-        w.Tick(new ShipInput(0, 0, Order: 1));
-        Assert.Equal(CrewOrder.Battle, ship.Order);
+        Assert.Equal(CrewOrder.Balanced, ship.Order);   // the player's crew starts on the balanced split
+        ship.Order = CrewOrder.Battle;
         Assert.Equal(new[] { 4, 2, 1, 3 }, ship.Stations());
-        w.Tick(new ShipInput(0, 0, Order: 2));
+        ship.Order = CrewOrder.MakeSail;
         Assert.Equal(new[] { 4, 2, 1, 3 }, ship.Stations());
         ship.Crew = 3;
         Assert.Equal(new[] { 1, 2, 0, 0 }, ship.Stations());   // make sail: riggers first
-        w.Tick(new ShipInput(0, 0, Order: 3));
+        ship.Order = CrewOrder.Repair;
         Assert.Equal(new[] { 0, 1, 1, 1 }, ship.Stations());
-        w.Tick(new ShipInput(0, 0, Order: 4));
-        Assert.Equal(CrewOrder.Balanced, ship.Order);
     }
 
     [Fact]

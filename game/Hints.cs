@@ -31,6 +31,7 @@ public partial class Hints : CanvasLayer
         new("cartographer", h => h.atSea > 20 && !h.world.HasCartographer, h => h.world.HasCartographer, "prompt"),
         new("chart", h => h.atSea > 45 && !h.ChartOpened && h.world.HasCartographer, h => h.ChartOpened),
         new("spyglass", h => h.atSea > 90, h => false),
+        new("first_fish", h => h.atSea > 60 && h.world.CanFish && h.world.Ship.Speed < 4 && !h.world.LinesOut, h => h.world.LinesOut, "prompt"),
         new("storm", h => h.world.ConditionsAt(h.world.Ship.Pos).Storm > 0.05, h => false, "wind"),
     };
 

@@ -27,7 +27,8 @@ public enum BayStyle { Cove, Ria }
 /// <summary>
 /// One row of the layout table: which landforms a region builds and how. <see cref="LandShare"/> is the share of the
 /// region that is land; <see cref="Groups"/> how many island groups it gathers into; <see cref="Channel"/> the open
-/// water kept between landforms (m); <see cref="Scale"/> multiplies every landform size.
+/// water kept between landforms (m); <see cref="Scale"/> multiplies every landform size. Share and channel are v6's:
+/// the generator stretches the sea by <see cref="Map.Stretch"/> (the same land, farther apart).
 /// </summary>
 public sealed record RegionLayout(
     RegionType Id, double LandShare, int Groups, double Channel, double Scale, BayStyle Bays, Landform Signature,

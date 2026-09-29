@@ -74,7 +74,7 @@ public class AiTests
     {
         var w = Sea.Fixed(fromCompass: 0, seed: 6);
         Sea.Point(w, 90);
-        w.Ship.Pos = new Vec2(-500, 900);
+        w.Ship.Pos = OpenWater(w, RegionType.TradeIsles, 700);   // no island in the line of fire
         w.Ship.Cannons = 2;
         var hunter = w.SpawnHunter("sloop", w.Ship.Pos + new Vec2(-350, 120), Faction.Brethren);
         hunter.Cannons = 4;   // a full crew; early hunters spawn lighter (Threat 1 → half guns) and that is tested in DirectorTests

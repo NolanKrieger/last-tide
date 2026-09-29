@@ -14,6 +14,8 @@ public static class Ice
     public const double Cell = 200;
     /// <summary>Floes are kept this far off every shore and harbour ring, so no coast or quay is iced in.</summary>
     public const double ShoreClear = 30;
+    /// <summary>Floes thin toward land: <see cref="ShoreShare"/> of the pack at the shore, all of it <see cref="ShoreThin"/> m out.</summary>
+    public const double ShoreThin = 300, ShoreShare = 0.3;
 
     public static void Near(Map map, Vec2 p, double radius, double time, List<Floe> into)
     {
@@ -32,13 +34,28 @@ public static class Ice
                     var home = centre + new Vec2(U() - 0.5, U() - 0.5) * Cell;
                     double size = 4 + 26 * Math.Pow(U(), 2.2);
                     double orbit = 20 + 60 * U(), period = 300 + 500 * U(), phase = U() * Angles.Tau, turn = U() * Angles.Tau;
+                    double keep = U();   // drawn with the rest before any skip, so a floe is the same floe from every query
                     double a = phase + Angles.Tau * time / period;
                     var pos = home + Vec2.FromAngle(a) * orbit;
                     if (pos.DistanceTo(p) > radius + size) continue;
+                    // Its own patch lies in the Reach too, so by a border a floe strays over by its orbit at most.
+                    if (map.RegionAt(home).Type != RegionType.IceReach) continue;
                     if (!Clear(map, pos, size)) continue;
-                    into.Add(new Floe(((long)x << 36) ^ ((long)y << 8) ^ k, pos, size, turn + a * 0.3));
+                    // Nor on a whirlpool, nor off the chart (where the outer whirlpools turn): nothing overlaps them.
+                    if (Map.BeyondEdge(pos) > -size || OnWhirlpool(map, pos, size)) continue;
+                    // Thinner toward land (Nolan, 2026-09-28): a third as thick at the shore, the full pack 300 m out.
+                    long id = ((long)x << 36) ^ ((long)y << 8) ^ k;
+                    if (keep > Shore.Openness(Shore.DistanceCached(map, id, home, ShoreThin), ShoreShare, ShoreThin)) continue;
+                    into.Add(new Floe(id, pos, size, turn + a * 0.3));
                 }
             }
+    }
+
+    static bool OnWhirlpool(Map map, Vec2 pos, double size)
+    {
+        foreach (var w in map.Whirlpools)
+            if (w.Pos.DistanceTo(pos) < w.Radius + size) return true;
+        return false;
     }
 
     static bool Clear(Map map, Vec2 pos, double size)

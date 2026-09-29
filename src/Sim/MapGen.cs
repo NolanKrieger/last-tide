@@ -11,13 +11,14 @@ public static class MapGen
     public const int MinPorts = 140, MaxPorts = 152, MinCoves = 10, MaxCoves = 14;
     /// <summary>
     /// The generator's rules version, recorded in suspend saves. 6: the 18 × 13.5 km chart of twelve regions whose
-    /// islands are built from landforms (<see cref="Landforms"/>). Voyages charted by older versions cannot resume.
+    /// islands are built from landforms (<see cref="Landforms"/>). 7: the same sea stretched <see cref="Map.Stretch"/>×
+    /// (25.2 × 18.9 km), the islands as big and as many but farther apart. Voyages charted by older versions cannot resume.
     /// </summary>
-    public const int Version = 6;
-    public const double StartRouteRange = 600;   // metres of sea: about half a day's sail
-    public const double EdgeMargin = 400;
+    public const int Version = 7;
+    public const double StartRouteRange = 600 * Map.Stretch;   // metres of sea: the nearest markets, well within a day's sail
+    public const double EdgeMargin = 400 * Map.Stretch;
     /// <summary>A luxury is not sold within this distance of where it is made (GDD §5 step 4).</summary>
-    public const double LuxuryDistance = 3000;
+    public const double LuxuryDistance = 3000 * Map.Stretch;
 
     public static Map Generate(int seed, int version = Version)
     {
@@ -92,17 +93,18 @@ public static class MapGen
 
         // Island groups: each region gathers its land around a few centres, as real archipelagos do, leaving wide lanes
         // of open water between them. The first group sits at the region's heart and holds its signature landform.
+        const double stretch = Map.Stretch;
         var groups = new List<(Vec2 C, double Sigma)>();
         foreach (var region in map.Regions)
         {
-            groups.Add((region.Seed, rng.Range(900, 1400)));
+            groups.Add((region.Seed, rng.Range(900, 1400) * stretch));
             int count = RegionLayout.Of(region.Type).Groups - 1;
             for (int k = 0, t = 0; k < count && t < 300; t++)
             {
-                var p = region.Seed + new Vec2(rng.Range(-2600, 2600), rng.Range(-2600, 2600));
-                if (Math.Abs(p.X) > Map.HalfW - 900 || Math.Abs(p.Y) > Map.HalfH - 900 || map.RegionAt(p).Type != region.Type) continue;
-                if (groups.Any(g => g.C.DistanceTo(p) < 1500)) continue;
-                groups.Add((p, rng.Range(500, 1100)));
+                var p = region.Seed + new Vec2(rng.Range(-2600, 2600), rng.Range(-2600, 2600)) * stretch;
+                if (Math.Abs(p.X) > Map.HalfW - 900 * stretch || Math.Abs(p.Y) > Map.HalfH - 900 * stretch || map.RegionAt(p).Type != region.Type) continue;
+                if (groups.Any(g => g.C.DistanceTo(p) < 1500 * stretch)) continue;
+                groups.Add((p, rng.Range(500, 1100) * stretch));
                 k++;
             }
         }
@@ -119,7 +121,7 @@ public static class MapGen
             double before = covered[region.Index];
             for (int t = 0; t < 40; t++)
             {
-                var p = region.Seed + Vec2.FromAngle(rng.Range(0, Angles.Tau)) * rng.Range(0, 700);
+                var p = region.Seed + Vec2.FromAngle(rng.Range(0, Angles.Tau)) * rng.Range(0, 700 * stretch);
                 if (TryLandform(map, rng, placed, covered, sig, region, p, rng.Range(0.6, 1.0), grain)) break;
             }
             // The signature is extra: it counts for only a third of its land, so the region still fills round it.
@@ -127,14 +129,15 @@ public static class MapGen
         }
 
         // Then the fill: darts thinned by the groups, bigger landforms toward a group's heart, sizes leaning small as
-        // they do in real archipelagos, until each region has its share of land.
+        // they do in real archipelagos, until each region has its share of land (v6's land in a sea stretched
+        // Map.Stretch× each way: the same islands, farther apart).
         int misses = 0;
         for (int dart = 0; dart < 80000 && misses < 4000; dart++, misses++)
         {
             var p = new Vec2(rng.Range(-Map.HalfW + EdgeMargin, Map.HalfW - EdgeMargin), rng.Range(-Map.HalfH + EdgeMargin, Map.HalfH - EdgeMargin));
             var region = map.RegionAt(p);
             var layout = RegionLayout.Of(region.Type);
-            if (covered[region.Index] >= layout.LandShare * area[region.Index]) continue;
+            if (covered[region.Index] >= layout.LandShare * area[region.Index] / (stretch * stretch)) continue;
             double density = Density(p);
             if (rng.NextDouble() > 0.01 + density * density * density) continue;
             var kind = WeightedPick(layout.Forms.ToList(), f => f.Weight, rng).Kind;
@@ -150,9 +153,10 @@ public static class MapGen
         int seed = unchecked(map.Seed * 7919 + placed.Count * 104729 + map.Islands.Count * 31 + 11);
         var form = Landforms.Build(kind, region.Type, p, (min + (max - min) * u) * layout.Scale, grain[region.Index], rng, seed);
         double baseReach = form.BaseReach;
+        double channel = layout.Channel * Map.Stretch;   // the table's channels are v6's; the sea between is stretched
         if (Math.Abs(form.Centre.X) + baseReach > Map.HalfW - EdgeMargin * 0.6 || Math.Abs(form.Centre.Y) + baseReach > Map.HalfH - EdgeMargin * 0.6) return false;
         foreach (var q in placed)
-            if (q.C.DistanceTo(form.Centre) < q.Reach + baseReach + Math.Max(q.Channel, layout.Channel) * 0.3) return false;
+            if (q.C.DistanceTo(form.Centre) < q.Reach + baseReach + Math.Max(q.Channel, channel) * 0.3) return false;
         // The delta's channels are the Mangrove Maze: keep it inside the region whose hull rule guards it.
         if (kind == Landform.Delta)
             for (int k = 0; k < 12; k++)
@@ -174,14 +178,14 @@ public static class MapGen
             && Gap(rock, big) < 25));
         if (islands.Count == 0) return false;
         foreach (var island in islands)
-            foreach (var other in map.IslandsNear(island.Centre, island.BoundRadius + 200))
+            foreach (var other in map.IslandsNear(island.Centre, island.BoundRadius + 200 * Map.Stretch))
             {
-                double need = Math.Max(40, Math.Max(layout.Channel, RegionLayout.Of(other.Region).Channel) * 0.6);
+                double need = Math.Max(40, Math.Max(layout.Channel, RegionLayout.Of(other.Region).Channel) * Map.Stretch * 0.6);
                 if (island.Centre.DistanceTo(other.Centre) > island.BoundRadius + other.BoundRadius + need) continue;
                 if (Gap(island, other) < need) return false;
             }
 
-        placed.Add(new Footprint(form.Centre, reach, layout.Channel));
+        placed.Add(new Footprint(form.Centre, reach, channel));
         foreach (var island in islands) covered[region.Index] += Coastlines.Area(island.Points);
         foreach (var island in islands)
         {
@@ -204,51 +208,53 @@ public static class MapGen
         return best;
     }
 
-    // ---- 2b. Whirlpools: the Maelstrom Straits' tide races turn in the narrows, and one great maelstrom in open water ----
+    // ---- 2b. Whirlpools: the Maelstrom Straits' tide races turn in their open reaches, and one great maelstrom ----
     /// <summary>Share of a whirlpool's radius closed to the nav grid, so lanes and captains keep out of all but its weak rim.</summary>
     public const double WhirlpoolClosed = 0.85;
+    /// <summary>Open water kept between a whirlpool's rim and any shore (m): none turns near land (Nolan, 2026-09-28).</summary>
+    public const double WhirlpoolShoreMargin = 120;
+    public const double WhirlpoolMinRadius = 80, WhirlpoolMaxRadius = 150, GreatMaelstromRadius = 260, GreatMaelstromMin = 180;
 
+    /// <summary>
+    /// The Maelstrom Straits' whirlpools, in open water well clear of land and of each other (Nolan, 2026-09-28: "it should
+    /// never overlap anything", "whirlpools shouldnt happen near land"): each is sized to the sea round it, keeping
+    /// <see cref="WhirlpoolShoreMargin"/> of water to every shore, and a reach too tight for one gets none.
+    /// </summary>
     static void PlaceWhirlpools(Map map, Rng rng)
     {
         var region = map.RegionOf(RegionType.Maelstrom);
-        var narrows = new List<(Vec2 P, double Width)>();
-        for (double y = region.Seed.Y - 2600; y <= region.Seed.Y + 2600; y += 60)
-            for (double x = region.Seed.X - 2600; x <= region.Seed.X + 2600; x += 60)
+        var open = new List<(Vec2 P, double Room)>();   // Room: the largest radius that keeps the margin to every shore
+        double box = 2600 * Map.Stretch, reach = WhirlpoolMaxRadius + WhirlpoolShoreMargin;
+        for (double y = region.Seed.Y - box; y <= region.Seed.Y + box; y += 90)
+            for (double x = region.Seed.X - box; x <= region.Seed.X + box; x += 90)
             {
                 var p = new Vec2(x, y);
                 if (!Map.InBounds(p) || map.RegionAt(p).Type != RegionType.Maelstrom || !map.Nav.IsOpenSea(p)) continue;
-                // A narrows: two different shores close by on roughly opposite sides.
-                var shores = map.IslandsNear(p, 170).Select(i => i.Closest(p)).Where(c => !c.Inside && c.Dist < 170).ToList();
-                bool found = false;
-                double width = 0;
-                for (int a = 0; a < shores.Count && !found; a++)
-                    for (int b = a + 1; b < shores.Count && !found; b++)
-                        if ((shores[a].Point - p).Normalized.Dot((shores[b].Point - p).Normalized) < -0.6)
-                        {
-                            found = true;
-                            width = shores[a].Dist + shores[b].Dist;
-                        }
-                if (found && width > 110) narrows.Add((p, width));
+                double room = Shore.Distance(map, p, reach) - WhirlpoolShoreMargin;
+                if (room >= WhirlpoolMinRadius) open.Add((p, Math.Min(room, WhirlpoolMaxRadius)));
             }
-        Shuffle(narrows, rng);
-        int want = 6 + rng.Next(5);
-        foreach (var (p, width) in narrows)
-        {
-            if (map.Whirlpools.Count >= want) break;
-            if (map.Whirlpools.Any(w => w.Pos.DistanceTo(p) < 600)) continue;
-            map.Whirlpools.Add(new Whirlpool(p, Math.Clamp(width * 0.75, 80, 150), rng.Range(3, 4.5)));
-        }
-        // The great maelstrom: in the openest water near the region's heart.
+        // The great maelstrom first, in the openest water near the region's heart.
         Vec2 best = region.Seed;
         double bestD = -1;
         for (int t = 0; t < 200; t++)
         {
-            var p = region.Seed + new Vec2(rng.Range(-1800, 1800), rng.Range(-1800, 1800));
+            var p = region.Seed + new Vec2(rng.Range(-1800, 1800), rng.Range(-1800, 1800)) * Map.Stretch;
             if (!Map.InBounds(p) || map.RegionAt(p).Type != RegionType.Maelstrom || !map.Nav.IsOpenSea(p)) continue;
-            double d = map.IslandsNear(p, 500).Select(i => i.Closest(p)).Select(c => c.Inside ? 0 : c.Dist).DefaultIfEmpty(500).Min();
-            if (d > bestD && map.Whirlpools.All(w => w.Pos.DistanceTo(p) > 700)) { bestD = d; best = p; }
+            double d = Shore.Distance(map, p, GreatMaelstromRadius + WhirlpoolShoreMargin + 20);
+            if (d > bestD) { bestD = d; best = p; }
         }
-        if (bestD >= 280) map.Whirlpools.Add(new Whirlpool(best, 260, 6));
+        double great = Math.Min(GreatMaelstromRadius, bestD - WhirlpoolShoreMargin);
+        if (great >= GreatMaelstromMin) map.Whirlpools.Add(new Whirlpool(best, great, 6));
+        Shuffle(open, rng);
+        int want = 6 + rng.Next(5) + map.Whirlpools.Count;
+        foreach (var (p, room) in open)
+        {
+            if (map.Whirlpools.Count >= want) break;
+            double radius = Math.Max(WhirlpoolMinRadius, room * rng.Range(0.75, 1));
+            // Clear water between any two as well: a rim-to-rim gap a ship can sail through.
+            if (map.Whirlpools.Any(w => w.Pos.DistanceTo(p) < w.Radius + radius + 300)) continue;
+            map.Whirlpools.Add(new Whirlpool(p, radius, rng.Range(3, 4.5)));
+        }
         foreach (var w in map.Whirlpools) map.Nav.Close(w.Pos, w.Radius * WhirlpoolClosed);
     }
 
@@ -475,6 +481,7 @@ public static class MapGen
         foreach (var good in Goods.All)
         {
             var g = good.Id;
+            if (!Goods.IsTraded(g)) continue;   // the catch: no port makes it, every port buys it (Market)
             if (good.Group == GoodGroup.Rare)
             {
                 // Sold only by coves; bought dearly in Storm Reach and at the big ports.
@@ -598,10 +605,10 @@ public static class MapGen
         var region = map.RegionOf(RegionType.Sargasso);
         for (int tries = 0; tries < 3000 && map.Wrecks.Count < count; tries++)
         {
-            var p = region.Seed + new Vec2(rng.Range(-2600, 2600), rng.Range(-2200, 2200));
+            var p = region.Seed + new Vec2(rng.Range(-2600, 2600), rng.Range(-2200, 2200)) * Map.Stretch;
             if (!Map.InBounds(p) || map.RegionAt(p).Type != RegionType.Sargasso) continue;
             if (!map.Nav.IsSea(p) || !map.Nav.IsOpenSea(p) || map.IslandsNear(p, 120).Any(i => i.Closest(p).Dist < 120)) continue;
-            if (map.Wrecks.Any(w => w.Pos.DistanceTo(p) < 400)) continue;
+            if (map.Wrecks.Any(w => w.Pos.DistanceTo(p) < 400 * Map.Stretch)) continue;
             map.Wrecks.Add(new Wreck { Id = map.Wrecks.Count, Pos = p });
         }
     }

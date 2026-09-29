@@ -272,11 +272,18 @@ public partial class Audio : Node
             switch (e.Type)
             {
                 case CombatEventType.Fire: Play("cannon", e.ShipId == ship.Id ? 1.0 : 0.8 * far, 0.12, e.ShipId == ship.Id ? 1.0 : 0.9); break;
-                case CombatEventType.Hit: Play("hit", e.ShipId == ship.Id ? 1.0 : 0.7 * far, 0.08); break;
+                case CombatEventType.Hit:
+                    // Her own shot striking home is heard however far off it lands, a touch higher, so a hit is never in doubt.
+                    if (e.By == ship.Id && e.ShipId != ship.Id) Play("hit", Math.Max(0.75, 0.7 * far), 0.08, 1.15);
+                    else Play("hit", e.ShipId == ship.Id ? 1.0 : 0.7 * far, 0.08);
+                    break;
                 case CombatEventType.Splash: Play("splash", 0.6 * Math.Max(far, e.ShipId == ship.Id ? 0.5 : 0), 0.1, 0.9 + 0.2 * GD.Randf()); break;
                 case CombatEventType.Ram: Play("ram", Math.Max(far, 0.4), 0.3); break;
                 case CombatEventType.Sink: Play("sink", e.ShipId == ship.Id ? 1.0 : 0.7 * far, 0.5); break;
-                case CombatEventType.Collect: Play("coins", 0.8, 0.2); break;
+                case CombatEventType.Collect:
+                    if (e.Good == (int)Good.Fish) Play("splash", 0.3, 0.2, 1.25 + 0.2 * GD.Randf());   // a fish over the rail: a small splash, not coins
+                    else Play("coins", 0.8, 0.2);
+                    break;
                 case CombatEventType.Rescued: Play("bell", 0.8, 0.5); break;
                 case CombatEventType.Ring: Play("quill", 0.5, 0.3); break;
             }

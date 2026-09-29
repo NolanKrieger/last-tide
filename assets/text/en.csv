@@ -105,7 +105,7 @@ CHART_PRICE,"{0} {1}"
 CHART_SELLS,"Sells: {0}"
 CHART_BUYS,"Buys: {0}"
 CHART_SEEN,"prices as seen on Day {0}"
-CHART_HEARD,"prices from a rumour, Day {0}"
+CHART_HEARD,"prices heard from the {1}, Day {0}"
 CHART_KEY,Key to the chart
 CHART_KEY_CROWN,Crown colony
 CHART_KEY_FORT,with a fort
@@ -113,7 +113,6 @@ CHART_KEY_FREE,Free port
 CHART_KEY_HAVEN,Brethren haven
 CHART_KEY_COVE,Secret cove
 CHART_KEY_TREASURE,Treasure
-CHART_KEY_RUMOUR,Cove rumour
 CHART_KEY_WRECK,Wreck
 CHART_KEY_PIN,Your pin
 CHART_KEY_SHIP,Your ship
@@ -146,9 +145,6 @@ PORT_BUY_CANNON,"Buy a cannon · {0} gold"
 PORT_SELL_CANNON,"Sell a cannon · {0} gold"
 PORT_TAVERN_CREW,"Hands aboard {0} of {1}"
 PORT_HIRE,"Hire {0} · {1} gold"
-PORT_RUMOR,"Buy a rumour · {0} gold"
-PORT_RUMOR_LINE,"{0}: {1} at {2} gold · seen Day {3} · {4}"
-PORT_RUMOR_NONE,"The tavern talks for a price."
 PORT_RESULT_NOGOLD,Not enough gold.
 PORT_RESULT_NOROOM,No room in the hold.
 PORT_RESULT_NOTSOLD,"This yard builds only hulls the maze's channels will take."
@@ -212,11 +208,6 @@ HUD_GAUGE_WATER,water
 HUD_GUN_Q,[[FirePort]]
 HUD_GUN_E,[[FireStarboard]]
 HUD_MUNITIONS,"{0} shot · {1} guns"
-HUD_ORDER,"{0} · guns {1} · sails {2} · repair {3} · spare {4}"
-ORDER_BATTLE,[[Order1]] Battle stations
-ORDER_MAKESAIL,[[Order2]] Make sail
-ORDER_REPAIR,[[Order3]] Repair
-ORDER_BALANCED,[[Order4]] Balanced
 HUD_LAST_STAND,"LAST STAND · {0}"
 HUD_LAST_STAND_HULL,"She is foundering. Reach any open harbour before the glass runs out."
 HUD_LAST_STAND_WATER,"Water at the gunwales. Patch her above 60% hull to drain her below 80%, or reach a harbour."
@@ -345,7 +336,7 @@ NOTICE_NO_CARTOGRAPHER,"No cartographer aboard: hire one at a tavern to keep a c
 ACHIEVEMENT_galleon_captain,"Achievement: Galleon Captain"
 ACHIEVEMENT_ship_of_the_line,"Achievement: Ship of the Line"
 CREW_TITLE,"Crew {0} of {1} · {2}"
-CREW_NOTE,"Hands not at a station stand spare. Guns need one hand each, sails the hull's riggers, repair one per 100 hull. Orders [[Order1]]–[[Order4]] reset the split."
+CREW_NOTE,"Hands not at a station stand spare. Guns need one hand each, sails the hull's riggers, repair one per 100 hull. Use − and + to move hands; new hands go where they are wanted."
 CREW_HEAD,"Crew · {0} of {1}"
 CREW_CLOSE,[[Crew]] or Esc closes
 CREW_WAGES,"wages {0} gold a day · {1} provisions a day"
@@ -363,8 +354,7 @@ STATION_GUNS,"Guns {0} (need {1})"
 STATION_SAILS,"Sails {0} (need {1})"
 STATION_REPAIR,"Repair {0} (need {1})"
 STATION_SPARE,"Spare {0}"
-ORDER_CUSTOM,Custom
-HUD_HINTS,"[[SailUp]] / [[SailDown]] sail · [[Port]] / [[Starboard]] helm · [[FirePort]] / [[FireStarboard]] broadsides · RMB spyglass · [[Order1]]–[[Order4]] / [[Crew]] crew · [[Lantern]] lantern · [[Dock]] dock · [[Chart]] chart · Esc pause"
+HUD_HINTS,"[[SailUp]] / [[SailDown]] sail · [[Port]] / [[Starboard]] helm · [[FirePort]] / [[FireStarboard]] broadsides · RMB spyglass · [[Crew]] crew · [[Lantern]] lantern · [[Dock]] dock · [[Chart]] chart · Esc pause"
 PORT_BLACK_MARKET,Black market
 PORT_UNIQUE_BUY,"Buy · {0} gold"
 PORT_OWNED,aboard
@@ -399,10 +389,6 @@ PORT_HULL_YOURS_SHORT,Yours
 PORT_HULL_BUY_SHORT,"{0} gold"
 PORT_HULL_SWAP,"Trade down · the yard pays {0} gold"
 PORT_HIRE_NOTE,"{0} gold a head to sign on · wages are paid at midnight"
-PORT_RUMOURS,Rumours
-PORT_RUMOURS_HEARD,Rumours in your ledger
-PORT_RUMOUR_HEARD,"{0} · {1} about {2} · Day {3}"
-PORT_RUMOR_COVE,"The keeper leans in: a smugglers' cove hides somewhere near. The rough place is marked on your chart with a ‘?’."
 PORT_MAP_HEAD,A bottle map
 PORT_OFFICER_NAME,"{0} · {1}"
 PORT_OFFICER_TERMS,"{0} gold to sign · {1} a day"
@@ -422,15 +408,14 @@ PORT_EACH,"{0} each"
 PORT_HELD_PAID,"{0} · paid {1} each"
 PORT_HELD_ONLY,"{0}"
 PORT_HINT_SEEN,"Your ledger: {0} pays about {1} · seen Day {2}"
-PORT_HINT_RUMOUR,"A rumour: {0} pays about {1} · heard Day {2}"
-PORT_HINT_NONE,"No other price in your ledger yet. Taverns sell rumours of distant markets."
+PORT_HINT_NONE,"No other price in your ledger yet. Prices are learned in port, or from a merchant hailed at sea."
 PORT_BUY_FOR,"Buy {0} · {1} gold"
 PORT_BUY_CANT,"Buy {0} · cannot"
 PORT_SELL_FOR,"Sell {0} · {1} gold"
 PORT_SELL_NONE,"None in the hold"
 PORT_ELSEWHERE,Prices on record elsewhere
 PORT_KNOWN_SEEN,"{0} · about {1} · seen Day {2}"
-PORT_KNOWN_RUMOUR,"{0} · about {1} · rumour, Day {2}"
+PORT_KNOWN_HEARD,"{0} · about {1} · the {3} said, Day {2}"
 PORT_ROLE_MAKES,"Made here, so it is cheap here."
 PORT_ROLE_WANTS,"Wanted here, so it fetches a good price."
 PORT_ROLE_NEITHER,"Neither made nor much wanted here."
@@ -588,10 +573,10 @@ HINT_tack,"To go upwind, zigzag: sail close-hauled, then turn through the wind w
 HINT_dock,"[[Dock]] docks inside a harbour ring. Buy what is cheap here and sell it where it is wanted."
 HINT_trade,"Prices move as you buy and sell, and drift back over days. The chart ([[Chart]]) remembers what you saw."
 HINT_hostile,"A hostile sail. Hold [[FirePort]] or [[FireStarboard]] to aim a broadside and release to fire; ram with speed on if you must."
-HINT_leak,"Water in the hold: below 60% hull she floods, above it she drains. [[Order3]] puts carpenters first to plug leaks and patch her; [[Order4]] goes back to balanced. A shipwright mends the rest."
+HINT_leak,"Water in the hold: below 60% hull she floods, above it she drains. Open the crew panel ([[Crew]]) and put hands on repair to plug leaks and patch her. A shipwright mends the rest."
 HINT_night,"Night: your lantern is lit, so you see farther but are seen from afar. [[Lantern]] douses it to slip past unseen."
 HINT_threat,"The bar at the top is the Threat. The sea grows crueller by the day, whatever you do."
-HINT_chart,"[[Chart]] opens the chart: pins, rumours, cove hints and bottle maps live there."
+HINT_chart,"[[Chart]] opens the chart: pins, prices you have seen and bottle maps live there."
 HINT_cartographer,"No cartographer aboard: you see the sea around you, but nothing is kept on the chart. Dock with [[Dock]] and hire one at the tavern."
 HINT_spyglass,"Hold the right mouse button to raise the spyglass toward the cursor."
 HINT_storm,"A storm: shorten sail before the wind tears it, and keep the bow to the swells."
@@ -628,13 +613,9 @@ ACT_Crew,Crew panel
 ACT_Lantern,Lantern
 ACT_Dock,"Dock · dig · salvage"
 ACT_Chart,Chart
-ACT_Order1,Order: battle
-ACT_Order2,Order: make sail
-ACT_Order3,Order: repair
-ACT_Order4,Order: balanced
 TITLE_OPTIONS,Options
 PAUSE_OPTIONS,Options
-HUD_KEYS,"{0} / {1} sail · {2} / {3} helm · {4} / {5} broadsides · RMB spyglass · {6}-{7} / {8} crew · {9} lantern · {10} dock · {11} chart · Esc pause"
+HUD_KEYS,"{0} / {1} sail · {2} / {3} helm · {4} / {5} broadsides · RMB spyglass · {6} crew · {7} lantern · {8} dock · {9} chart · Esc pause"
 NOTICE_RESCUE_SPENT,"The harbour will not take her in twice. Hold her afloat or find another port."
 HUD_WIND_KN,"{0:0} kn"
 HUD_WIND_FROM,"from {0}"
@@ -650,16 +631,11 @@ HUD_STATION_0,guns
 HUD_STATION_1,sails
 HUD_STATION_2,repair
 HUD_STATION_3,spare
-ORDER_NAME_BATTLE,Battle stations
-ORDER_NAME_MAKESAIL,Make sail
-ORDER_NAME_REPAIR,Repair
-ORDER_NAME_BALANCED,Balanced
-ORDER_NAME_CUSTOM,Custom
+HUD_CREW_STATIONS,Stations
 HUD_LEGEND_SAIL,sail
 HUD_LEGEND_HELM,helm
 HUD_LEGEND_FIRE,broadsides
 HUD_LEGEND_SPYGLASS,spyglass
-HUD_LEGEND_ORDERS,orders
 HUD_LEGEND_CREW,crew
 HUD_LEGEND_LANTERN,lantern
 HUD_LEGEND_DOCK,dock
@@ -675,7 +651,7 @@ HUD_STAND_NO_HARBOUR,No harbour on your chart will take her in
 HUD_MARK,"{0} · {1} m"
 HUD_MARK_MORE,"{0} +{1} · {2} m"
 HUD_MARK_REPORTED,"{0} · lookout"
-HUD_STAND_PATCH,carpenters first: patch her over the flood line
+HUD_STAND_PATCH,hands to repair: patch her over the flood line
 TITLE_VOYAGE_HEAD,A New Voyage
 TITLE_NAME_PLACEHOLDER,Her name
 TITLE_ABANDON_HEAD,Abandon the saved voyage?
@@ -729,6 +705,18 @@ NOTICE_BOUNTY,"A pirate sunk: the Crown owes you {0} gold. Claim it at any Crown
 NOTICE_CONTRACT_LATE,"Too late for {0}: the contract is void and the advance is owed back."
 NOTICE_SEARCH_CLEAR,"A Crown patrol came alongside and searched her. Nothing found."
 NOTICE_SEARCH_CAUGHT,"A Crown patrol found the contraband: seized, and a fine of {0} gold."
+NOTICE_FLOTSAM_PORT,"Flotsam! A barrel adrift off the port bow. Sail over it to haul it aboard."
+NOTICE_FLOTSAM_STARBOARD,"Flotsam! A barrel adrift off the starboard bow. Sail over it to haul it aboard."
+CALLOUT_DEALT,{0}
+CALLOUT_TAKEN,−{0}
+CALLOUT_GOT,+{0} {1}
+CALLOUT_GOLD,+{0} gold
+CALLOUT_LEAK,Leak!
+CALLOUT_SUNK,Sunk!
+HUD_FLOTSAM,Flotsam
+HUD_MARK_DELIVERY,"{0} · {1} · due {2}"
+HUD_DIST_M,{0} m
+HUD_DIST_KM,{0} km
 CHART_KEY_CONTRACT,Delivery due
 CHART_CONTRACT_DUE,"due {0}"
 FACTION_ADJ_crown,Crown
@@ -763,3 +751,35 @@ SHIPCARD_BOUNTY,"Crown bounty: {0} gold"
 SHIPCARD_RANGE,"{0} m off · {1} kn"
 SHIPCARD_IN_REACH,within reach of your guns
 SHIPCARD_OWN_HOLD,"Hold {0} of {1} · {2} kn"
+HUD_FISH,"Put out lines"
+HUD_FISHING,"Lines out · {0} hands fishing · haul in"
+HUD_FISH_NO_HANDS,"No hands free to fish: {0} crew"
+NOTICE_LINES_OUT,"Lines out. The gun crews and the spare hands fish while she lies under a third of sail."
+NOTICE_LINES_IN,"Lines hauled in."
+NOTICE_LINES_IN_SAIL,"Lines hauled in to make sail."
+NOTICE_FISH_SLOW,"Shorten sail to a third to put out lines."
+NOTICE_FISH_NO_HANDS,"No hands free to fish: move some off the sails or repair on the crew panel."
+NOTICE_FISH_HOLD_FULL,"The hold is full: lines hauled in."
+NOTICE_FISH_SPOILED,"Some of the fish turned in the night and went over the side."
+NOTICE_FISH_BEAST,"Something huge took the line!"
+NOTICE_FISH_PEARL,"An oyster on the line, and a pearl in it."
+NOTICE_FISH_AMBERGRIS,"A lump of ambergris came up with the fish."
+GOOD_fish,Fish
+GROUP_CATCH,Her own catch
+HINT_first_fish,"Fish anywhere: under a third of sail or furled, [[Dock]] puts out lines. Hands on the guns or spare fish; the crew eats fish before provisions, and it keeps about three days. Every port buys it."
+HUD_FOOD_FISH,"{0}+{1} fish"
+HUD_HAIL,Hail the {0}
+NOTICE_HAIL,"The {0} answers your hail: her master's prices from {1} are in your ledger."
+NOTICE_HAIL_STALE,"The {0} answers your hail, but has no news you don't already have."
+NOTICE_HAIL_NONE,"The {0} answers your hail: fresh out of her home port, she has no news yet."
+SHIPCARD_NEWS_1,"News of 1 port she traded in: hail her with [[Dock]] within {1} m"
+SHIPCARD_NEWS,"News of {0} ports she traded in: hail her with [[Dock]] within {1} m"
+PORT_WANTED_HEAD,Wanted nearby
+PORT_WANTED_NOTE,"Posted by the harbour master: ports within a few days' sail short of what they want. No prices: the market there will tell."
+PORT_WANTED_LINE,"{0} wanted at {1} · about {2}"
+PORT_WANTED_BADLY,"{0} badly wanted at {1} · about {2}"
+PORT_SAIL_1,a day's sail
+PORT_SAIL_N,{0} days' sail
+PORT_WANTED_AT,{0} ({1})
+PORT_WANTED_NONE,"No port nearby is short of anything it wants."
+PORT_WANTED_HERE,"Posted as wanted at {0}, about {1}"

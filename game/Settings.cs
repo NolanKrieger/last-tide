@@ -10,11 +10,11 @@ namespace LastTide;
 /// </summary>
 public sealed class Settings
 {
-    public static readonly string[] Actions = { "SailUp", "SailDown", "Port", "Starboard", "FirePort", "FireStarboard", "Crew", "Lantern", "Dock", "Chart", "Order1", "Order2", "Order3", "Order4" };
+    public static readonly string[] Actions = { "SailUp", "SailDown", "Port", "Starboard", "FirePort", "FireStarboard", "Crew", "Lantern", "Dock", "Chart" };
     public static readonly Dictionary<string, string> Defaults = new()
     {
         ["SailUp"] = "W", ["SailDown"] = "S", ["Port"] = "A", ["Starboard"] = "D", ["FirePort"] = "Q", ["FireStarboard"] = "E",
-        ["Crew"] = "C", ["Lantern"] = "L", ["Dock"] = "F", ["Chart"] = "M", ["Order1"] = "Key1", ["Order2"] = "Key2", ["Order3"] = "Key3", ["Order4"] = "Key4",
+        ["Crew"] = "C", ["Lantern"] = "L", ["Dock"] = "F", ["Chart"] = "M",
     };
     public static readonly (int W, int H)[] Resolutions = { (1280, 720), (1600, 900), (1920, 1080), (2560, 1440) };
 
@@ -58,6 +58,7 @@ public sealed class Settings
         Keys ??= new Dictionary<string, string>(Defaults);
         foreach (var k in Keys.Where(kv => kv.Value == null).Select(kv => kv.Key).ToList()) Keys[k] = Defaults.GetValueOrDefault(k, "None");
         foreach (var (k, v) in Defaults) Keys.TryAdd(k, v);
+        foreach (var k in Keys.Keys.Where(k => !Defaults.ContainsKey(k)).ToList()) Keys.Remove(k);   // retired actions (the 1–4 crew orders)
         UiScale = double.IsFinite(UiScale) ? Math.Clamp(UiScale, 0.75, 1.5) : 1.0;
         Master = Volume(Master, 1.0);
         Ambience = Volume(Ambience, 0.8);

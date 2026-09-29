@@ -21,17 +21,23 @@ public class AutopilotTests
     [Fact]
     public void TradesFromTheLeanStart()
     {
-        // Three seas, four days each: every voyage visits and trades; at least one turns the 200 gold into more
-        // (which seed does depends on where the hunters happen to prowl in those first days).
-        int bestWorth = 0;
-        foreach (int seed in new[] { 7, 11, 1000 })
+        // Six seas, four days each: every voyage visits, most trade, and at least one turns the 200 gold into more. On the
+        // stretched v7 chart a lean sloop chased by a pirate can spend three days between two ports and sell nothing
+        // (seeds 7 and 11 since 2026-09-28), so "every voyage trades" on three pinned seeds was a matter of luck.
+        // Visits too: seed 7 spends a third of its four days fleeing Brethren sloops and makes port once (2026-09-28).
+        int bestWorth = 0, traded = 0, twice = 0;
+        var seeds = new[] { 7, 11, 1000, 8, 9, 12 };
+        foreach (int seed in seeds)
         {
             var (w, a) = Run(seed, Preset.RoughSeas, 4);
-            Assert.True(a.Visits >= 2, $"seed {seed}: visits {a.Visits}");
-            Assert.True(a.Trades >= 1, $"seed {seed}: trades {a.Trades}");
+            Assert.True(a.Visits >= 1, $"seed {seed}: visits {a.Visits}");
+            if (a.Visits >= 2) twice++;
+            if (a.Trades >= 1) traded++;
             int worth = w.Player.Gold + (int)Goods.All.Sum(d => w.Player.Units(d.Id) * w.Player.CostBasis[(int)d.Id]);
             bestWorth = Math.Max(bestWorth, Math.Max(worth, a.MaxGold));
         }
+        Assert.True(twice >= 5, $"{twice} of {seeds.Length} voyages made two ports in four days");
+        Assert.True(traded >= 4, $"{traded} of {seeds.Length} voyages traded in four days");
         Assert.True(bestWorth >= 150, $"best worth {bestWorth}: the lean start should not be a bankruptcy in four days on every sea");
     }
 

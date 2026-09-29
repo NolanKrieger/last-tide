@@ -18,9 +18,9 @@ public static class Tuning
     public static double SailChangeRate = 0.16;                // sail fraction per second: one step ≈ 2.5 s
     public static double TurnMultAtFullSail = 0.6;             // full sail turns slower; ×1.0 at ⅓ and below
 
-    // Speed scale. A sloop at polar 1.0, full sail and standard wind makes 12 m/s ≈ 23 kn,
-    // so the 6 km map crosses in ~4 in-game days at a good point of sail (§5).
-    public static double SloopTopSpeed = 12.0;
+    // Speed scale. A sloop at polar 1.0, full sail and standard wind makes 13.2 m/s ≈ 26 kn (12 until 2026-09-28:
+    // every ship 10% faster, Nolan, after a playtester found sailing slow; monster chase speeds rose with it).
+    public static double SloopTopSpeed = 13.2;
     public static double SloopTurnRate = 40 * Math.PI / 180;   // rad/s at ⅓ sail, full rudder, full authority
     public static double StandardWind = 8.0;                   // m/s; target speed scales with sqrt(wind / standard)
     public static double WindMultMin = 0.45, WindMultMax = 1.3;

@@ -26,7 +26,7 @@ public partial class OptionsScreen : CanvasLayer
     {
         ("OPT_GROUP_SAILING", new[] { "SailUp", "SailDown", "Port", "Starboard" }),
         ("OPT_GROUP_GUNS", new[] { "FirePort", "FireStarboard" }),
-        ("OPT_GROUP_CREW", new[] { "Order1", "Order2", "Order3", "Order4", "Crew" }),
+        ("OPT_GROUP_CREW", new[] { "Crew" }),
         ("OPT_GROUP_SHIP", new[] { "Lantern", "Dock", "Chart" }),
     };
 

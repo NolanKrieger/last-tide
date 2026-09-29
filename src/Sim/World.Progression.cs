@@ -255,4 +255,23 @@ public sealed partial class World
         Ship.CustomStations[2] = Math.Max(0, repair);
         Ship.Order = CrewOrder.Custom;
     }
+
+    /// <summary>
+    /// Hands just signed on go where hands are still wanted (sails, then guns, then repair), not to the spare bench: with
+    /// no order keys there is no "balanced" to fall back on once the stations are set by hand. First they refill places
+    /// that lost hands, as the stations already hold those.
+    /// </summary>
+    void ManNewHands()
+    {
+        if (Ship.Order != CrewOrder.Custom) return;   // the balanced split takes them in already
+        while (true)
+        {
+            Ship.Split(out int guns, out int sails, out int repair, out int spare);
+            if (spare <= 0) return;
+            if (sails < Ship.Hull.Riggers) Ship.CustomStations[1] = sails + 1;
+            else if (guns < Ship.Cannons) Ship.CustomStations[0] = guns + 1;
+            else if (repair < Ship.RepairHands) Ship.CustomStations[2] = repair + 1;
+            else return;
+        }
+    }
 }
