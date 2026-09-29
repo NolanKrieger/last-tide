@@ -38,7 +38,6 @@ public partial class PortScreen : CanvasLayer
     Label[] elsewhere = Array.Empty<Label>();
     Label detailRole = null!;
     Label detailName = null!, detailGroup = null!, detailBuy = null!, detailSell = null!, detailStock = null!, detailHeld = null!, detailHint = null!, detailQty = null!;
-    Label detailWanted = null!;
     UiGauge detailStockGauge = null!;
     PanelContainer detail = null!;
     Label marketHint = null!;
@@ -63,9 +62,6 @@ public partial class PortScreen : CanvasLayer
     Button hire1 = null!, hire5 = null!, buyMap = null!;
     readonly List<(OfficerType Type, Label Name, UiPips Tier, Label Effect, Label Terms, Label Aboard, Button Hire, Button Dismiss)> officerRows = new();
     // Harbour office
-    Label wantedNone = null!;
-    Label[] wantedLines = Array.Empty<Label>();
-    List<World.WantedNotice> wanted = new();
     Label boardEmpty = null!, heldHead = null!, heldNone = null!, bountyLine = null!, arrivalLine = null!;
     PanelContainer arrivalCard = null!;
     Label[] receiptLines = Array.Empty<Label>();
@@ -91,9 +87,6 @@ public partial class PortScreen : CanvasLayer
     /// <summary>The tavern's Hire button for an officer type (the self-test clicks the cartographer's).</summary>
     public Button OfficerHireButton(OfficerType type) => officerRows.First(r => r.Type == type).Hire;
     public Button MoreButton = null!, MaxButton = null!;
-    /// <summary>The office's "wanted nearby" lines as shown (the self-test compares them with the sim's board).</summary>
-    public IEnumerable<string> WantedShown => wantedLines.Where(l => l.Visible).Select(l => l.Text);
-    public bool WantedNoneShown => built && wantedNone.Visible;
 
     public void Init(World w, Font f)
     {
@@ -349,10 +342,6 @@ public partial class PortScreen : CanvasLayer
             elsewhere[i].TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
             info.AddChild(elsewhere[i]);
         }
-        detailWanted = Parchment.L("", "Flavour");
-        detailWanted.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        detailWanted.AddThemeColorOverride("font_color", Ink.Wind);
-        info.AddChild(detailWanted);
         detailHint = Parchment.L("", "Flavour");
         detailHint.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         detailHint.CustomMinimumSize = new Vector2(300, 0);
@@ -718,23 +707,6 @@ public partial class PortScreen : CanvasLayer
         bountyLine.CustomMinimumSize = new Vector2(240, 0);
         bt.AddChild(bountyLine);
 
-        // What the ports nearby want (Nolan, 2026-09-28): the harbour master's words, never a price.
-        Card(right, Parchment.Tex("icon-map"), 48, 48, out var wt);
-        wt.AddChild(Parchment.L(Text.Get("PORT_WANTED_HEAD"), "Head"));
-        var wnote = Parchment.L(Text.Get("PORT_WANTED_NOTE"), "Caption");
-        wnote.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        wnote.CustomMinimumSize = new Vector2(260, 0);
-        wt.AddChild(wnote);
-        wantedLines = new Label[World.WantedShown];
-        for (int i = 0; i < wantedLines.Length; i++)
-        {
-            wantedLines[i] = Parchment.L("", "Data");
-            wantedLines[i].AutowrapMode = TextServer.AutowrapMode.WordSmart;
-            wantedLines[i].CustomMinimumSize = new Vector2(260, 0);
-            wt.AddChild(wantedLines[i]);
-        }
-        wantedNone = Parchment.L(Text.Get("PORT_WANTED_NONE"), "Flavour");
-        wt.AddChild(wantedNone);
 
         arrivalCard = Card(right, Parchment.Tex("icon-gold"), 48, 40, out var at);
         at.AddChild(Parchment.L(Text.Get("PORT_ARRIVAL_HEAD"), "Head"));
@@ -759,21 +731,6 @@ public partial class PortScreen : CanvasLayer
         "RECEIPT_CAUGHT" => Text.Get(r.Key, -r.Gold),
         _ => Text.Get(r.Key, r.Gold),
     };
-
-    /// <summary>"Sugar badly wanted at Port Elmore (Storm Reach) · about 1.5 days' sail": words, never a price.</summary>
-    string WantedLine(World.WantedNotice n)
-    {
-        var p = world.Map.Ports[n.Port];
-        string where = Text.Get("PORT_WANTED_AT", p.Name, Text.Get("REGION_" + RegionDef.Of(p.Region).Key));
-        return Text.Get(n.Badly ? "PORT_WANTED_BADLY" : "PORT_WANTED_LINE", Text.Get("GOOD_" + Goods.Of(n.Good).Key), where, Sail(n.Days));
-    }
-
-    /// <summary>"a day's sail", "2.5 days' sail": to the half day, at least half a day.</summary>
-    static string Sail(double days)
-    {
-        double d = Math.Max(0.5, Math.Round(days * 2) / 2);
-        return d == 1 ? Text.Get("PORT_SAIL_1") : Text.Get("PORT_SAIL_N", Parchment.N(d, "0.#"));
-    }
 
     void RefreshOffice(Port port)
     {
@@ -803,12 +760,6 @@ public partial class PortScreen : CanvasLayer
             sign.Disabled = full || !room;
         }
         boardEmpty.Visible = !any;
-        for (int i = 0; i < wantedLines.Length; i++)
-        {
-            wantedLines[i].Visible = i < wanted.Count;
-            if (i < wanted.Count) wantedLines[i].Text = WantedLine(wanted[i]);
-        }
-        wantedNone.Visible = wanted.Count == 0;
         heldHead.Text = Text.Get("PORT_OFFICE_HELD", player.Contracts.Count, World.MaxContracts);
         for (int i = 0; i < contractRows.Count; i++)
         {
@@ -993,7 +944,6 @@ public partial class PortScreen : CanvasLayer
         var ship = world.Ship;
 
         tabsHint.Text = Text.Get("PORT_TABS_HINT");   // key names follow the bindings
-        wanted = world.WantedNotices(port);   // the office's board, read by the office page and the market's detail
 
         // Header: who owns the port and how they regard her.
         title.Title = port.Name;
@@ -1214,10 +1164,6 @@ public partial class PortScreen : CanvasLayer
                 : Text.Get("PORT_KNOWN_SEEN", world.Map.Ports[e.Port].Name, Math.Round(e.Price * Market.Spread), Math.Floor(e.Day) + 1);
             elsewhere[i].AddThemeColorOverride("font_color", Math.Round(e.Price * Market.Spread) > UnitBuy(port, selected) ? Ink.Black : Parchment.Muted);
         }
-        var posted = wanted.Where(n => n.Good == selected).ToList();
-        detailWanted.Visible = posted.Count > 0;
-        if (posted.Count > 0)
-            detailWanted.Text = string.Join("\n", posted.Select(n => Text.Get("PORT_WANTED_HERE", world.Map.Ports[n.Port].Name, Sail(n.Days))));
         detailHint.Visible = known.Count == 0;
         detailHint.Text = Text.Get("PORT_HINT_NONE");
         detailQty.Text = "×" + n;

@@ -4,7 +4,7 @@ namespace Sim.Tests;
 
 /// <summary>
 /// Nolan, 2026-09-28: the tavern's rumours are gone; prices are only learned in port, but a merchant hailed at sea tells
-/// the prices at the ports she traded in, and the harbour office posts which nearby ports want what (no prices).
+/// the prices at the ports she traded in.
 /// </summary>
 public class NewsTests
 {
@@ -120,28 +120,5 @@ public class NewsTests
         Assert.Equal(w.Player.Ledger.Count(e => e.Heard), loaded.Player.Ledger.Count(e => e.Heard));
         for (int i = 0; i < 90; i++) { w.Tick(new ShipInput(0, 0)); loaded.Tick(new ShipInput(0, 0)); }
         Assert.Equal(w.Hash(), loaded.Hash());
-    }
-
-    [Fact]
-    public void TheOfficePostsWhatNearbyPortsWantInWordsOnly()
-    {
-        var w = Quiet();
-        Assert.Equal(PortResult.Ok, w.Apply(new PortCommand(PortAction.Dock)));
-        var here = w.Docked!;
-        var near = w.Map.Ports.First(p => p != here && !p.Secret && w.IsOpen(p) && p.Consumes.Any(g => !Goods.IsRare(g))
-            && w.SeaDistance(here.Id, p.Id) is var d && d >= World.OfferMinDistance && d <= World.OfferMaxDistance);
-        var good = near.Consumes.First(g => !Goods.IsRare(g));
-        near.Market.Stock[(int)good] = near.Market.Target[(int)good] * 0.05;   // nearly none left: badly wanted
-        var board = w.WantedNotices(here);
-        Assert.InRange(board.Count, 1, World.WantedShown);
-        Assert.Equal(new World.WantedNotice(near.Id, good, true, w.SeaDistance(here.Id, near.Id) / World.PassageMetresPerDay), board[0]);
-        foreach (var n in board)
-        {
-            var p = w.Map.Ports[n.Port];
-            Assert.True(p.Consumes.Contains(n.Good) && !p.Secret && p != here);
-            Assert.True(p.Market.Stock[(int)n.Good] < p.Market.Target[(int)n.Good] * 0.85);
-        }
-        Assert.DoesNotContain(board, n => n.Port == here.Id);
-        Assert.DoesNotContain(board, n => Goods.IsRare(n.Good));   // she carries none: a cove's rarity is not her news
     }
 }

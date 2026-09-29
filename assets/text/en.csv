@@ -774,12 +774,3 @@ NOTICE_HAIL_STALE,"The {0} answers your hail, but has no news you don't already 
 NOTICE_HAIL_NONE,"The {0} answers your hail: fresh out of her home port, she has no news yet."
 SHIPCARD_NEWS_1,"News of 1 port she traded in: hail her with [[Dock]] within {1} m"
 SHIPCARD_NEWS,"News of {0} ports she traded in: hail her with [[Dock]] within {1} m"
-PORT_WANTED_HEAD,Wanted nearby
-PORT_WANTED_NOTE,"Posted by the harbour master: ports within a few days' sail short of what they want. No prices: the market there will tell."
-PORT_WANTED_LINE,"{0} wanted at {1} · about {2}"
-PORT_WANTED_BADLY,"{0} badly wanted at {1} · about {2}"
-PORT_SAIL_1,a day's sail
-PORT_SAIL_N,{0} days' sail
-PORT_WANTED_AT,{0} ({1})
-PORT_WANTED_NONE,"No port nearby is short of anything it wants."
-PORT_WANTED_HERE,"Posted as wanted at {0}, about {1}"

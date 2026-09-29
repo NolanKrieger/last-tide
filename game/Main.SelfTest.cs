@@ -920,10 +920,6 @@ public partial class Main
         Click(portScreen.Tabs[3]);
         await Frames(1);
         Check(portScreen.Page == 3 && portScreen.FocusOnPage(3), "the harbour office tab (clicked) opens its page");
-        var wantedBoard = world.WantedNotices(home);
-        Check(portScreen.WantedShown.Count() == wantedBoard.Count && portScreen.WantedNoneShown == (wantedBoard.Count == 0)
-              && portScreen.WantedShown.All(t => !t.Contains(" gold")),
-            $"the office posts what nearby ports want, in words ({string.Join(" / ", portScreen.WantedShown)})");
         var board = world.ContractOffers(home);
         int onBoard = Array.FindIndex(board, c => c != null);
         Check(onBoard >= 0, "the home port's office has work on its board");

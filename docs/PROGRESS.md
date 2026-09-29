@@ -570,6 +570,26 @@ too rich) and over a Trade Isles ground 61 m off a beach at the final rates (fai
 "6+5 fish" on the HUD). Not done: a balance batch (the harness is not on the laptop); best case now ~17 fish a minute
 (6 lines in the richest inshore ground), an ordinary sea ~1.5.
 
+## News without rumours (2026-09-28)
+
+Nolan: "get rid of the rumour, you only know the price of ports while you are in that port"; he kept the ledger and asked
+for hailing merchants "to ask about the ports they have recently been to", then "within 100m not 150m" and "get rid of the
+wanted notices". Rules: GDD §5, §13 and §19 "News without rumours".
+
+- **Removed:** the tavern's rumour (`PortAction.Rumor`, `RumorPrice`, `LastRumor`, the cove "?" areas and `CoveHint`,
+  the tavern's rumour card, the chart's "?" marks and key entry); the ledger's rumour flag became `LedgerEntry.Teller`.
+  The harbour office's "wanted nearby" notices were built and removed the same day.
+- **Merchant news** (`src/Sim/World.News.cs`, `AiState.News`): prices at her last 3 ports, recorded on loading and selling;
+  F within **100 m** hails her (`World.HailableMerchant`, `Hail`; before the fishing lines, not while they are out);
+  HUD prompt "Hail the <name>" (`Hud`), a news line on her card (`ShipCard`), notices; ledger lines say "the <name> said,
+  Day N" (market) and "prices heard from the <name>" (chart).
+
+Evidence (2026-09-29): `dotnet test` NewsTests 4/4 (a merchant records the prices where she loads and sells, keeps 3
+ports; a hail enters them dated her visit and never over a fresher price, marks the ports, answers stale once she has
+nothing new; a struck or out-of-hail merchant does not answer; news and heard prices save and replay). Whole suite
+294/294 without the sweep before the notices were removed. `--selftest` **PASS, 240 ok** (the hail prompt names her at
+under 100 m; F through the real key path puts her prices in the ledger).
+
 ## Next
 - Balance on the v6 world: the chart is 3× each way and ports ½–1 day apart, so re-run the autopilot batches for all
   three presets before tuning anything (GDD §11 day targets, upkeep, provisions, Threat per day).

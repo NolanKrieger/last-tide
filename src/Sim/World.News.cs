@@ -5,15 +5,13 @@ namespace LastTide.Sim;
 /// while you are in that port ... i should also be able to interact with merchant ships to ask about the ports they have
 /// recently been to"). Prices are still only ever learned in port: a merchant remembers the prices at the last ports she
 /// traded in, and a captain who hails her (F within <see cref="HailRange"/>) enters them in her ledger, dated the day the
-/// merchant was there. And the harbour office posts which nearby ports are short of what they want, in words, no prices.
+/// merchant was there.
 /// </summary>
 public sealed partial class World
 {
     /// <summary>Metres within which a merchant answers a hail, and how many ports' prices she carries.</summary>
-    public const double HailRange = 150;
+    public const double HailRange = 100;
     public const int MerchantNewsKept = 3;
-    /// <summary>At most this many "wanted" notices on an office's board.</summary>
-    public const int WantedShown = 4;
 
     /// <summary>A merchant trades at a port: she remembers its prices today (what it makes and what it wants).</summary>
     void RecordNews(Ship ship, Port port)
@@ -75,32 +73,5 @@ public sealed partial class World
             : Note("NOTICE_HAIL", name, string.Join(", ", ports)));
         Events.Add(new CombatEvent(CombatEventType.Ring, merchant.Pos, merchant.Id, 1));
         return learned;
-    }
-
-    /// <summary>A harbour office's notice: a port within a few days' sail short of something it wants.</summary>
-    public readonly record struct WantedNotice(int Port, Good Good, bool Badly, double Days);
-
-    /// <summary>
-    /// The "wanted" notices at <paramref name="here"/>'s office: open ports within the office's reach whose stock of a good
-    /// they want runs short (scarce: badly wanted), shortest first, then nearest; rare goods only while she carries some.
-    /// Words only: no price is given.
-    /// </summary>
-    public List<WantedNotice> WantedNotices(Port here)
-    {
-        var list = new List<(WantedNotice N, double Ratio)>();
-        foreach (var p in Map.Ports)
-        {
-            if (p == here || p.Secret || !IsOpen(p)) continue;
-            double d = SeaDistance(here.Id, p.Id);
-            if (d < OfferMinDistance || d > OfferMaxDistance) continue;
-            foreach (var g in p.Consumes)
-            {
-                if (Goods.IsRare(g) && Player.Units(g) == 0) continue;   // a cove's rarity is news only to one who carries it
-                double r = p.Market.Stock[(int)g] / p.Market.Target[(int)g];
-                if (r >= 0.85) continue;   // "short" or worse (Market.StockWord)
-                list.Add((new WantedNotice(p.Id, g, r < 0.5, d / PassageMetresPerDay), r));
-            }
-        }
-        return list.OrderBy(x => x.Ratio).ThenBy(x => x.N.Days).Take(WantedShown).Select(x => x.N).ToList();
     }
 }
