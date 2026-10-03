@@ -6,7 +6,7 @@ namespace LastTide;
 /// <summary>
 /// Pure ambience and effects (GDD §16: no music). Every sound is synthesized by <c>tools/audio/build.py</c>
 /// and loaded at runtime from <c>assets/audio</c>. Loops follow the world (wind, waves, creak, rain, harbour,
-/// gulls, digging, water, the siren); one-shots follow sim events and a few UI moments.
+/// digging, water, the siren); one-shots follow sim events and a few UI moments.
 /// Buses: Master → Ambience, SFX (created here if the project has none).
 /// </summary>
 public partial class Audio : Node
@@ -20,7 +20,7 @@ public partial class Audio : Node
         public float Gain = 1f;
     }
 
-    static readonly string[] LoopNames = { "wind_low", "wind_high", "waves", "creak", "rain", "harbour", "gulls", "dig", "water_rush", "siren_song" };
+    static readonly string[] LoopNames = { "wind_low", "wind_high", "waves", "creak", "rain", "harbour", "dig", "water_rush", "siren_song" };
     readonly Dictionary<string, AudioStreamWav> streams = new();
     readonly Dictionary<string, Loop> loops = new();
     readonly List<AudioStreamPlayer> pool = new();
@@ -186,7 +186,6 @@ public partial class Audio : Node
             portDist = Math.Min(portDist, port.Harbor.DistanceTo(ship.Pos));
         }
         Set("harbour", docked ? 0.8 * duck : Math.Clamp(1 - portDist / 320.0, 0, 1) * 0.6 * duck);
-        Set("gulls", cond.Night ? 0 : Math.Clamp(1 - portDist / 500.0, 0, 1) * 0.5 * duck);
         Set("dig", w.Digging ? 0.8 * duck : 0);
         Set("water_rush", !docked && ship.Leaks > 0 ? Math.Min(1, 0.35 + 0.2 * ship.Leaks) * duck : 0);
         Set("siren_song", w.Monster is { Type: MonsterType.Siren, Surfaced: true } m ? Math.Clamp(1 - m.Pos.DistanceTo(ship.Pos) / 300.0, 0, 1) * 0.8 * duck : 0);

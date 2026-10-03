@@ -755,7 +755,7 @@ public partial class Main
         await Frames(2);
 
         // Audio: every loop loaded, the sea is audible, a sail change and a broadside make their sounds, harbour bustle in port.
-        Check(audio.Loaded, "all eleven ambience loops loaded from assets/audio");
+        Check(audio.Loaded, "every ambience loop loaded from assets/audio");
         world.Ship.Pos = OpenWater(300);
         world.Ship.SailTarget = 0;
         world.Ship.SailFraction = 0;

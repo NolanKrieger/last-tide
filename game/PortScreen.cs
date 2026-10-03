@@ -707,7 +707,6 @@ public partial class PortScreen : CanvasLayer
         bountyLine.CustomMinimumSize = new Vector2(240, 0);
         bt.AddChild(bountyLine);
 
-
         arrivalCard = Card(right, Parchment.Tex("icon-gold"), 48, 40, out var at);
         at.AddChild(Parchment.L(Text.Get("PORT_ARRIVAL_HEAD"), "Head"));
         receiptLines = new Label[5];

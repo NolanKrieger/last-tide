@@ -5,7 +5,7 @@ namespace LastTide.Sim;
 /// while you are in that port ... i should also be able to interact with merchant ships to ask about the ports they have
 /// recently been to"). Prices are still only ever learned in port: a merchant remembers the prices at the last ports she
 /// traded in, and a captain who hails her (F within <see cref="HailRange"/>) enters them in her ledger, dated the day the
-/// merchant was there.
+/// merchant was there. (The harbour office's "wanted nearby" board was cut, Nolan 2026-09-29.)
 /// </summary>
 public sealed partial class World
 {

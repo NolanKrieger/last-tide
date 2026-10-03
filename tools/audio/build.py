@@ -12,7 +12,7 @@ SR_AMB = 22050
 SR_SFX = 44100
 rng = np.random.default_rng(20260923)
 
-LOOPS = {"wind_low", "wind_high", "waves", "creak", "rain", "harbour", "gulls", "pumps", "dig", "water_rush", "siren_song"}
+LOOPS = {"wind_low", "wind_high", "waves", "creak", "rain", "harbour", "pumps", "dig", "water_rush", "siren_song"}
 
 def finish(data, sr):
     """One-shots start and end in silence: no DC offset, a 3 ms fade in and a 40 ms fade out. Several cues (kraken,
@@ -165,7 +165,7 @@ def gulls():
             out[s:end] += cry[: end - s] * rng.uniform(0.3, 0.8)
     return seamless(out, sr // 4)
 
-manifest["gulls"] = write("gulls", gulls(), SR_AMB)
+gulls()  # cut 2026-09-29 (Nolan): not written; still drawn so the shared rng, and every sound after it, stays identical
 
 def pumps():
     sr = SR_AMB; n = int(sr * 2.4)

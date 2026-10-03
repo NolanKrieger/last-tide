@@ -29,11 +29,6 @@
     "rate": 22050,
     "seconds": 15.5
   },
-  "gulls": {
-    "file": "gulls.wav",
-    "rate": 22050,
-    "seconds": 17.75
-  },
   "pumps": {
     "file": "pumps.wav",
     "rate": 22050,
